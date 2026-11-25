@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased — Phase 4: cost model · 2026-11-25
+
+**Added**
+- Cost model (plan §5.3, ADR 0009): pure `surplus/predictor/cost_model.py` builds fit windows from consecutive
+  readings of a bucket plus the tokens logged in between, fits percent-per-weighted-token per model family with
+  NNLS on price-ratio token weights, computes R² and flags fits with R² < 0.7 or < 8 windows as low confidence.
+  Families without a positive fit fall back to the scaled price-ratio prior (never "free").
+- `cost_model` table (migration `0005`) storing each fit's coefficients, weights, R², window counts and
+  flag; the collector refits nightly on the last 28 days (`Collector.refit_cost_models`).
+- Tests recover known coefficients from synthetic data (noise-free, noisy, and end-to-end from simulated
+  readings and events); NNLS is checked against brute force.
+
 ## Unreleased — per-project runner settings and "ask to continue" · 2026-11-25
 
 **Added**
