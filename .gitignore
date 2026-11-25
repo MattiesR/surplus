@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.pyc
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+node_modules/
+frontend/dist/
+backend/surplus/static/
+*.sqlite3
+*.db
+.env
+secrets.env
+test-results/
+playwright-report/

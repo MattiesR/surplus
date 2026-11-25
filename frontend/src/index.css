@@ -1,0 +1,174 @@
+@import "tailwindcss";
+
+/* Dark-mode-first. Light values are selected steps, not an automatic flip (dataviz reference palette). */
+:root {
+  color-scheme: dark;
+  --surface-0: #111111;
+  --surface-1: #191919;
+  --surface-2: #232323;
+  --border: #2e2e2e;
+  --text-primary: #efefef;
+  --text-secondary: #9c9c9c;
+  --grid: #2e2e2e;
+  --track: #2e2e2e;
+  --series-manual: #338ced; /* slot 1 blue */
+  --series-invisible: #e76624; /* slot 2 orange */
+  --series-agent: #00a888; /* slot 3 aqua */
+  --status-good: #0aac23;
+  --status-warning: #fbb315;
+  --status-critical: #dc3c3d;
+  --focus: #6aabf1;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:where(:not([data-theme="dark"])) {
+    color-scheme: light;
+    --surface-0: #f6f6f6;
+    --surface-1: #ffffff;
+    --surface-2: #f0f0f0;
+    --border: #e2e2e2;
+    --text-primary: #191919;
+    --text-secondary: #666666;
+    --grid: #e6e6e6;
+    --track: #e6e6e6;
+    --series-manual: #257de0;
+    --series-invisible: #f47230;
+    --series-agent: #00b894;
+    --focus: #1b64be;
+  }
+}
+
+html,
+body {
+  background: var(--surface-0);
+  color: var(--text-primary);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-feature-settings: "tnum";
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.muted {
+  color: var(--text-secondary);
+}
+
+.btn {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  border-radius: 6px;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.85rem;
+}
+.btn:hover:not(:disabled) {
+  border-color: var(--text-secondary);
+}
+.btn:disabled {
+  opacity: 0.5;
+}
+
+input.field {
+  border: 1px solid var(--border);
+  background: var(--surface-0);
+  border-radius: 6px;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.85rem;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+kbd {
+  font-family: ui-monospace, monospace;
+  font-size: 0.75em;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 0.25em;
+}
+
+textarea.field,
+select.field {
+  border: 1px solid var(--border);
+  background: var(--surface-0);
+  border-radius: 6px;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.85rem;
+}
+
+a {
+  text-underline-offset: 2px;
+}
+
+/* Rendered project Markdown */
+.prose-md {
+  line-height: 1.6;
+  font-size: 0.9rem;
+}
+.prose-md .md-h1 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+}
+.prose-md .md-h2 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 1rem 0 0.4rem;
+}
+.prose-md .md-h3 {
+  font-weight: 600;
+  margin: 0.8rem 0 0.3rem;
+}
+.prose-md p,
+.prose-md ul,
+.prose-md ol,
+.prose-md pre,
+.prose-md table {
+  margin: 0.5rem 0;
+}
+.prose-md ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+.prose-md ol {
+  list-style: decimal;
+  padding-left: 1.25rem;
+}
+.prose-md code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.85em;
+  background: var(--surface-2);
+  border-radius: 4px;
+  padding: 0.05em 0.3em;
+}
+.prose-md pre {
+  background: var(--surface-2);
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  overflow-x: auto;
+}
+.prose-md pre code {
+  background: none;
+  padding: 0;
+}
+.prose-md a {
+  color: var(--focus);
+  text-decoration: underline;
+}
+.prose-md th,
+.prose-md td {
+  border: 1px solid var(--border);
+  padding: 0.2rem 0.5rem;
+}

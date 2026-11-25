@@ -1,0 +1,117 @@
+# Changelog
+
+## Phase 3 — Runner and sandbox · 2026-11-25
+
+**Added**
+- Phase 0 gate: spikes 3–4 completed (`docs/spikes/03-04-container-and-sandbox.md`): setup-token auth works in a
+  rootless container; nested bubblewrap does not (ADR 0003 accepted); Podman's default network reaches the LAN.
+- Runner image `runner-image/Containerfile` (Debian slim, git, build tools, Node 22 LTS, uv with Python 3.12/3.13
+  preinstalled; 877 MB), built with
+  `surplus runner build` / `make runner-image`. The host's CLI binary is mounted read-only (ADR 0006).
+- Isolation (`runner/container.py`): rootless Podman, agent = host uid via `--userns=keep-id` (never root),
+  read-only root fs, tmpfs `/tmp` and home, `--cap-drop=all`, `no-new-privileges`, `--init`, memory/CPU/pids caps,
+  self-ending lifetime; mounts: the run clone, a per-run Claude config dir and the CLI binary only.
+- Network (ADR 0005): internal `surplus-agents` network + `surplus-egress` proxy (stdlib, `runner/egress_proxy.py`)
+  that allows ports 80/443 to public addresses only, checks the resolved address (no DNS rebinding), refuses
+  RFC1918/CGNAT/link-local/loopback/metadata/6to4/NAT64 and the host's own global addresses, logs every decision.
+  Optional host allowlist `SURPLUS_EGRESS_ALLOW` (ADR 0007).
+- Runs in a disposable clone (ADR 0006), git bundle snapshot first, branch `surplus/T-xxx-slug`, leftovers committed
+  inside the container, branch fetched back; merge/discard from the UI only (agents never push or merge).
+- Prompt composition (`runner/prompt.py`, Jinja templates in `runner/prompts/`): project, goals, task, related
+  decisions, last 3 run summaries; run rules via `--append-system-prompt`.
+- Stream parsing (`runner/stream.py`) → live log (SSE `run.log`), `rate_limit_event` → stored readings and a live
+  hard stop (5-hour ≥ 85% or weekly ≥ 90% → the agent is asked to wrap up; work is still verified and reported).
+- Verification: the project's `test_command` runs in the same container; the task is ticked off only if it passes.
+- Report schema (`runner/report.py`): validated JSON, one cheap repair turn (`--resume`, Haiku, 1 turn, no tools),
+  else a fallback from the branch. `.surplus/runs/<stamp>-rN.md`; suggestions appended as `proposed` tasks.
+- State machine (`runner/state.py`) persisted in the new `run` table (migration `0003`); restart recovery marks
+  interrupted runs and saves their branch; orphan containers of this instance are removed.
+- Agent usage is ingested from each run's own session log with `is_agent`, `run_id` and `project_id`.
+- API: `/api/runs` (list, detail, log, diff, preflight, start, stop, cancel, merge, discard); `/api/system` reports
+  image and token presence (never the value). `surplus doctor` checks the runner.
+- UI: "Run" on open backlog tasks (preflight, model, turns, remaining budget), project Runs tab, run detail page
+  (live log, facts, report, test output, diff, Stop and report / Cancel / Merge / Discard).
+- New projects created by Surplus get an empty first commit and a local `.surplus/` exclude.
+- Tests: 181 backend (FakeRuntime end-to-end runs with real git), 7 vitest, 9 Playwright; red-team suites:
+  `make redteam` (16 checks against real Podman, no quota) and `make redteam-agent` (real Haiku agent).
+
+**DoD check**
+- Red-team: the agent is instructed to write `/etc` (read-only fs), `~/` (path does not exist), reach
+  `192.168.0.1` (refused by the proxy) and read `~/.ssh` (absent) → all fail, verified on the host; an internet
+  fetch succeeds (example.com 200): ✅ `make redteam-agent`, plus 16 deterministic checks in `make redteam`.
+- Manual run on a toy project (`toy-calc`, Haiku, 8 turns, ~1 pp of the 5-hour window): branch
+  `surplus/T-001-…` with 1 commit, Surplus's own test run passed (10 tests), valid agent report, task ticked,
+  2 suggestions proposed; merged from the API afterwards: ✅
+
+**Decisions / deviations**
+- ADR 0006: disposable clone instead of worktree/branch-in-place; host CLI mounted instead of baked in.
+- ADR 0007: the token is readable by code inside the container (residual risk); optional egress allowlist.
+- Claude Code's own sandbox stays off inside the container (ADR 0003); `bypassPermissions` only inside it.
+- Prompt templates live in the package (`backend/surplus/runner/prompts/`) instead of a top-level `prompts/`.
+- Answering agent questions from the UI is left to Phase 5 (questions are shown and written to the run report).
+
+## Phase 2 — Projects and UI · 2026-11-25
+
+**Added**
+- Strict Markdown parsers/serialisers with byte-identical round trips (unit + hypothesis property tests):
+  - `project.md` front matter: flat `key: value  # comment`; edits replace only the value, so comments and
+    alignment survive (no YAML library, so nothing is reformatted).
+  - `backlog.md`: `- [ ] T-007 (P1, ~S, proposed) Title — acceptance: …`, notes as indented lines; any malformed
+    task line is an error with its line number (never silently dropped).
+  - `goals.md` (sections + acceptance bullets) and `decisions.md` (append-only, enforced on write).
+- Project files: atomic writes (temp + rename), every write guarded by the hash the editor started from
+  (409 on conflict, never a silent overwrite); path safety checks refuse system, home and dot-config folders
+  and Surplus's own data.
+- Registry: discovers `<projects root>/*/.surplus/project.md` plus explicitly registered folders, indexes
+  `project` and `task` tables (migration `0002`), marks vanished folders as missing.
+- File watcher (`watchfiles`, 200 ms debounce; `SURPLUS_WATCH_POLL=1` forces polling) → `project.changed` SSE.
+- API: list/create/detail, whole-file edits, settings, backlog add/update/delete/reorder, acceptance-criteria
+  assistant (one user-triggered Haiku call; its session is logged by the CLI, so the collector counts it), system check.
+- UI: router + nav + keyboard shortcuts (`g d`, `g p`, `n p`); Projects cards; Project detail with Overview
+  (rendered project.md), Goals (editor), Backlog (drag or ↑/↓ to reorder, done, accept proposed, delete, add,
+  or edit as text), Decisions, Runs (placeholder), Settings; 5-step new-project wizard with container check.
+- Tests: 112 backend, 5 vitest, 8 Playwright.
+
+**DoD check**
+- Create a project in the UI → files on disk are correct: ✅ (`e2e/projects.spec.ts`, `test_projects_api.py`).
+- Edit in an external editor → the UI updates within 2 s: ✅ (`e2e/projects.spec.ts` asserts ≤ 2 s in a real browser;
+  `test_projects.py` asserts the SSE event arrives within 2 s).
+
+**Decisions**
+- Default projects root `~/surplus-projects` (`SURPLUS_PROJECTS_ROOT` overrides) until open question §16.2 is answered.
+- Rendered Markdown headings are shifted down one level so each page keeps a single `<h1>`.
+
+## Phase 1 — Skeleton and collector · 2026-11-25
+
+**Added**
+- Repo scaffold: `uv` project (FastAPI, SQLAlchemy 2 + Alembic, Typer, structlog), Vite/React/TS frontend,
+  `Makefile` (`make check` = ruff + format + mypy --strict + tsc --strict + pytest + vitest), `CLAUDE.md`.
+- SQLite (WAL) schema with migration `0001`: `usage_event`, `limit_reading`, `surface_reading`, `ingest_cursor`,
+  `source_status`, `setting`.
+- JSONL ingestion: incremental (inode + byte offset), exactly-once by global `message.id` (ADR 0001), ignores partial
+  last lines and unknown line types. Real history (42 days, 78 files, 482 MB) ingests in 5.6 s; a re-run adds 0 rows.
+- Percent sources: zero-quota `get_usage` probe (primary, ADR 0002), `rate_limit_event` parser (for Phase 3 runs),
+  opt-in status-line spooler (`surplus statusline spool|install`), manual calibration (`POST /api/limits/manual`).
+- Reset Watcher scheduling: probe every 15 min and 3 min after each expected reset; reset-shift detection (> 5 min);
+  "resets stale > 1 h" flag that will pause runs.
+- Manual / agent / invisible split from the probe's weekly per-surface breakdown.
+- API: `/api/status`, `/api/usage/week`, `/api/probe`, `/api/events` (SSE); loopback-only, Host check (DNS rebinding),
+  HttpOnly session cookie + double-submit CSRF, bearer token for the CLI.
+- `surplus doctor`: CLI, auth + limits probe, Podman, log dir, percent freshness, channels.
+- Dashboard: gauges with reset countdowns, cumulative stacked weekly chart with table view, split card, sources, manual
+  calibration; dark-first with selected light steps; live updates over SSE.
+- Tests: 55 backend (contract tests on recorded CLI fixtures, FakeClaude probe tests, hypothesis property test),
+  3 vitest, 4 Playwright smoke tests (`make e2e`, isolated backend + FakeClaude).
+
+**DoD check**
+- Real history ingested idempotently: ✅
+- Gauges vs `/usage`: the gauges show the CLI's own `get_usage` numbers, so they match by construction (±0 pp).
+  Please confirm once against claude.ai → Settings → Usage.
+
+**Deviations from the plan**
+- React 19 instead of 18; hand-written shadcn-style components instead of the shadcn CLI (fewer deps).
+- New table `surface_reading` (weekly per-surface breakdown; not in plan §4.2).
+- Cost-model fitting (§5.3) is left for Phase 4, where the plan schedules it; Phase 1 splits with the price-ratio prior.
+
+## Phase 0 — Spikes · 2026-11-25
+- Findings in `docs/spikes/`, decisions in ADRs 0001–0004. Spikes 3–4 blocked on Podman + `claude setup-token`.

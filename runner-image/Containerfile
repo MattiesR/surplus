@@ -1,0 +1,37 @@
+# surplus-runner: the image every agent run executes in (plan §9.2).
+# The Claude Code CLI is NOT baked in: the host's binary is bind-mounted read-only at run time (ADR 0006),
+# so the container always runs the same CLI version as the host and the image stays small.
+FROM docker.io/library/debian:bookworm-slim
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      ca-certificates git curl jq less procps ripgrep \
+      python3 python3-venv python3-pip build-essential \
+ && rm -rf /var/lib/apt/lists/*
+
+# Node 22 LTS from the official image (Debian's Node 18 is too old for current Vite/Vitest).
+COPY --from=docker.io/library/node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/
+COPY --from=docker.io/library/node:22-bookworm-slim /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+ && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
+ && node --version && npm --version
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+
+# Python 3.12 and 3.13 managed by uv in a read-only system location, so `uv sync` in a run needs no download
+# (Debian's python3 is 3.11).
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python
+RUN uv python install 3.12 3.13 && chmod -R a+rX /opt/uv-python
+
+# Runs are started with --userns=keep-id, so uid 1000 here is the host user (files stay owned by them),
+# and the agent is never root inside the container.
+RUN useradd --create-home --uid 1000 --shell /bin/bash agent \
+ && git config --system init.defaultBranch main \
+ && git config --system safe.directory /workspace
+
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    UV_LINK_MODE=copy \
+    IS_SURPLUS_RUNNER=1
+WORKDIR /workspace
+USER agent
+LABEL org.surplus.role=runner

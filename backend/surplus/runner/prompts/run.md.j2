@@ -1,0 +1,34 @@
+# Project: {{ name }}
+
+{{ description }}
+
+# Goals
+{% for g in goals %}
+## {{ g.id }}. {{ g.title }}
+{%- for a in g.acceptance %}
+- {{ a }}
+{%- endfor %}
+{% else %}
+(no goals written yet)
+{% endfor %}
+# Your task: {{ task.id }} — {{ task.title }}
+
+- Priority: P{{ task.priority }}{% if task.size %} · estimated size: {{ task.size }}{% endif %}
+- Acceptance: {{ task.acceptance or "not specified: state the criteria you used in the report" }}
+{%- if notes %}
+- Notes:
+{{ notes }}
+{%- endif %}
+{% if decisions %}
+# Decisions the owner already made
+{% for d in decisions %}
+- {{ d }}
+{%- endfor %}
+{% endif %}
+{%- if recent_runs %}
+# Recent runs on this project
+{% for r in recent_runs %}
+- {{ r }}
+{%- endfor %}
+{% endif %}
+Start by exploring the repository, then implement the task.
