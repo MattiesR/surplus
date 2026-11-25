@@ -29,12 +29,17 @@ from surplus.collector.split import (
 )
 from surplus.collector.store import (
     IngestStats,
+    buckets_with_readings,
+    cost_model_inputs,
     ingest_logs,
     insert_readings,
     insert_snapshot,
+    latest_cost_model,
+    latest_cost_model_fit_at,
     latest_readings,
     latest_reset_reading,
     mark_source,
+    save_cost_model,
 )
 from surplus.config import Paths, Settings
 from surplus.db.models import SourceStatusRow, SurfaceReadingRow, UsageEventRow
@@ -47,10 +52,15 @@ from surplus.domain.models import (
     TokenCounts,
     UsageSnapshot,
 )
+from surplus.predictor.cost_model import CostModelFit, build_windows, fit_cost_model
 
 log = structlog.get_logger(__name__)
 
 ProbeFn = Callable[[], Awaitable[UsageSnapshot]]
+
+# Cost model (plan §5.3): refit nightly on the last four weeks of windows.
+COST_MODEL_REFIT_EVERY = timedelta(hours=24)
+COST_MODEL_HISTORY = timedelta(days=28)
 
 
 class Collector:
@@ -69,6 +79,8 @@ class Collector:
         )
         self.last_probe_at: datetime | None = None
         self._probe_lock = asyncio.Lock()
+        # A fit without coefficients stores nothing; remember the attempt so it is not retried every tick.
+        self.last_cost_fit_at: datetime | None = None
 
     # ------------------------------------------------------------------ ingestion
 
@@ -144,9 +156,52 @@ class Collector:
                 )
                 if due <= self.clock.now():
                     await self.probe_once()
+                if self.cost_model_due():
+                    await asyncio.to_thread(self.refit_cost_models)
             except Exception:  # the loop must survive anything; errors are logged with context
                 log.exception("collector.tick_failed")
             await asyncio.sleep(self.settings.tick_seconds)
+
+    # ------------------------------------------------------------------ cost model
+
+    def cost_model_due(self) -> bool:
+        with self.sm() as session:
+            stored = latest_cost_model_fit_at(session)
+        attempts = [t for t in (stored, self.last_cost_fit_at) if t is not None]
+        last = max(attempts) if attempts else None
+        return last is None or self.clock.now() - last >= COST_MODEL_REFIT_EVERY
+
+    def refit_cost_models(self) -> list[CostModelFit]:
+        """Fit and store the cost model for every bucket with recent readings (plan §5.3)."""
+        now = self.clock.now()
+        start = now - COST_MODEL_HISTORY
+        fits: list[CostModelFit] = []
+        self.last_cost_fit_at = now
+        with self.sm.begin() as session:
+            for bucket in buckets_with_readings(session, start):
+                readings, events = cost_model_inputs(session, bucket, start, now)
+                fit = fit_cost_model(bucket, build_windows(bucket, readings, events), self.clock)
+                stored = save_cost_model(session, fit)
+                log.info(
+                    "cost_model.fitted",
+                    bucket=bucket,
+                    readings=len(readings),
+                    events=len(events),
+                    windows=fit.n_windows,
+                    r2=fit.r2,
+                    low_confidence=fit.low_confidence,
+                    reasons=list(fit.reasons),
+                    coefficients={f: c.pct_per_weighted_token for f, c in fit.coefficients.items()},
+                    stored=stored,
+                )
+                fits.append(fit)
+        if fits:
+            self.bus.publish(Event("cost_model.fitted", {"buckets": [f.bucket for f in fits]}))
+        return fits
+
+    def cost_model(self, bucket: str) -> CostModelFit | None:
+        with self.sm() as session:
+            return latest_cost_model(session, bucket)
 
     # ------------------------------------------------------------------ queries
 

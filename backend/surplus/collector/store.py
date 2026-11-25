@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -17,13 +18,21 @@ from sqlalchemy.orm import Session, sessionmaker
 from surplus.clock import Clock
 from surplus.collector.jsonl import FileCursor, UsageTag, iter_log_files, read_new_lines
 from surplus.db.models import (
+    CostModelRow,
     IngestCursorRow,
     LimitReadingRow,
     SourceStatusRow,
     SurfaceReadingRow,
     UsageEventRow,
 )
-from surplus.domain.models import LimitReading, ReadingSource, UsageEvent, UsageSnapshot
+from surplus.domain.models import LimitReading, ReadingSource, TokenCounts, UsageEvent, UsageSnapshot
+from surplus.predictor.cost_model import (
+    CoefficientSource,
+    CostModelFit,
+    ModelCoefficient,
+    TokenEvent,
+    TokenWeights,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -219,4 +228,98 @@ def row_to_reading(row: LimitReadingRow) -> LimitReading:
         resets_at=row.resets_at,
         source=ReadingSource(row.source),
         status=row.status,
+    )
+
+
+# ------------------------------------------------------------------------------- cost model (plan §5.3)
+
+
+def cost_model_inputs(
+    session: Session, bucket: str, start: datetime, end: datetime
+) -> tuple[list[LimitReading], list[TokenEvent]]:
+    """Readings of `bucket` and token events in `[start, end]`, the raw material for `build_windows`."""
+    readings = [
+        row_to_reading(r)
+        for r in session.scalars(
+            select(LimitReadingRow)
+            .where(LimitReadingRow.bucket == bucket, LimitReadingRow.ts >= start, LimitReadingRow.ts <= end)
+            .order_by(LimitReadingRow.ts)
+        )
+    ]
+    stmt = select(
+        UsageEventRow.ts,
+        UsageEventRow.model,
+        UsageEventRow.input_tok,
+        UsageEventRow.output_tok,
+        UsageEventRow.cache_create_tok,
+        UsageEventRow.cache_read_tok,
+    ).where(UsageEventRow.ts >= start, UsageEventRow.ts <= end)
+    events = [
+        TokenEvent(ts, model, TokenCounts(input=i, output=o, cache_create=cc, cache_read=cr))
+        for ts, model, i, o, cc, cr in session.execute(stmt)
+    ]
+    return readings, events
+
+
+def save_cost_model(session: Session, fit: CostModelFit) -> int:
+    """Store one fit as one row per model family (with its R²). A fit without coefficients stores nothing."""
+    weights = json.dumps(fit.weights.as_dict(), sort_keys=True)
+    reasons = json.dumps(list(fit.reasons))
+    for c in fit.coefficients.values():
+        session.add(
+            CostModelRow(
+                bucket=fit.bucket,
+                model=c.family,
+                ts_fitted=fit.fitted_at,
+                pct_per_weighted_token=c.pct_per_weighted_token,
+                weights_json=weights,
+                r2=fit.r2,
+                source=c.source.value,
+                n_windows=fit.n_windows,
+                model_windows=c.n_windows,
+                low_confidence=fit.low_confidence,
+                reasons_json=reasons,
+            )
+        )
+    return len(fit.coefficients)
+
+
+def latest_cost_model(session: Session, bucket: str) -> CostModelFit | None:
+    """The most recent stored fit for `bucket`."""
+    ts = session.scalar(select(func.max(CostModelRow.ts_fitted)).where(CostModelRow.bucket == bucket))
+    if ts is None:
+        return None
+    rows = list(
+        session.scalars(
+            select(CostModelRow).where(CostModelRow.bucket == bucket, CostModelRow.ts_fitted == ts)
+        )
+    )
+    first = rows[0]
+    return CostModelFit(
+        bucket=bucket,
+        fitted_at=first.ts_fitted,
+        weights=TokenWeights(**json.loads(first.weights_json)),
+        coefficients={
+            r.model: ModelCoefficient(
+                r.model, r.pct_per_weighted_token, CoefficientSource(r.source), r.model_windows
+            )
+            for r in rows
+        },
+        r2=first.r2,
+        n_windows=first.n_windows,
+        low_confidence=first.low_confidence,
+        reasons=tuple(json.loads(first.reasons_json)),
+    )
+
+
+def latest_cost_model_fit_at(session: Session) -> datetime | None:
+    return session.scalar(select(func.max(CostModelRow.ts_fitted)))
+
+
+def buckets_with_readings(session: Session, since: datetime) -> list[str]:
+    """Buckets with at least one reading since `since`: the ones worth fitting."""
+    return list(
+        session.scalars(
+            select(LimitReadingRow.bucket).where(LimitReadingRow.ts >= since).distinct().order_by("bucket")
+        )
     )
