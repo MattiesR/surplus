@@ -194,3 +194,29 @@ class RunRow(Base):
     started_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime)
+
+
+class CostModelRow(Base):
+    """One fitted coefficient of the cost model (plan §5.3): % of `bucket` per weighted token of `model`.
+
+    All rows of one fit share `bucket`, `ts_fitted`, `weights_json`, `r2` and `low_confidence`.
+    """
+
+    __tablename__ = "cost_model"
+    __table_args__ = (
+        UniqueConstraint("bucket", "model", "ts_fitted", name="uq_cost_model"),
+        Index("ix_cost_model_bucket_ts", "bucket", "ts_fitted"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    bucket: Mapped[str] = mapped_column(String)
+    model: Mapped[str] = mapped_column(String)  # model family: haiku | sonnet | opus | other
+    ts_fitted: Mapped[datetime] = mapped_column(UTCDateTime)
+    pct_per_weighted_token: Mapped[float] = mapped_column(Float)
+    weights_json: Mapped[str] = mapped_column(Text)
+    r2: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source: Mapped[str] = mapped_column(String)  # fit | prior
+    n_windows: Mapped[int] = mapped_column(Integer)  # windows of the whole fit
+    model_windows: Mapped[int] = mapped_column(Integer)  # windows in which this family spent tokens
+    low_confidence: Mapped[bool] = mapped_column(Boolean)
+    reasons_json: Mapped[str] = mapped_column(Text, default="[]")
