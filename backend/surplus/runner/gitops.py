@@ -89,10 +89,11 @@ def snapshot_bundle(repo: Path, dest: Path) -> None:
     git(repo, "bundle", "create", str(dest), "--all", timeout=600)
 
 
-def prepare_clone(repo: Path, dest: Path, branch: str) -> str:
-    """Clone `repo` into `dest` (copied objects, no hardlinks, no remote) on a new `branch`.
+def prepare_clone(repo: Path, dest: Path, branch: str, existing: bool = False) -> str:
+    """Clone `repo` into `dest` (copied objects, no hardlinks, no remote) on a new `branch`, or, with
+    `existing`, on the project's existing `branch` (a continuation picks up where its parent stopped).
 
-    Returns the base commit sha.
+    Returns the commit sha the clone starts from.
     """
     if dest.exists():
         raise GitError(f"{dest} already exists")
@@ -106,17 +107,22 @@ def prepare_clone(repo: Path, dest: Path, branch: str) -> str:
     )
     if proc.returncode != 0:
         raise GitError(f"git clone: {proc.stderr.strip()[-400:]}")
+    if existing:
+        git(dest, "checkout", "--quiet", "-B", branch, f"refs/remotes/origin/{branch}")
     git(dest, "remote", "remove", "origin")
-    git(dest, "checkout", "--quiet", "-b", branch)
+    if not existing:
+        git(dest, "checkout", "--quiet", "-b", branch)
     return git(dest, "rev-parse", "HEAD").strip()
 
 
-def fetch_branch(repo: Path, clone: Path, branch: str) -> str | None:
+def fetch_branch(repo: Path, clone: Path, branch: str, update: bool = False) -> str | None:
     """Copy `branch` from the run clone into the project repo. Returns its sha, or None if it is missing.
 
-    Never overwrites an existing branch in the project (the name was made unique before the run).
+    Never overwrites an existing branch in the project (the name was made unique before the run). With
+    `update` (a continuation), an existing branch may only move forward: git refuses non-fast-forward updates
+    because the refspec has no `+`.
     """
-    if branch_exists(repo, branch):
+    if not update and branch_exists(repo, branch):
         raise GitError(f"branch {branch} already exists in the project")
     out = git(repo, "ls-remote", "--heads", str(clone), f"refs/heads/{branch}")
     if not out.strip():

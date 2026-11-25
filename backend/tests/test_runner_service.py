@@ -407,3 +407,139 @@ async def test_agent_usage_is_ingested_as_agent(env: Env) -> None:
         ev = s.scalars(select(UsageEventRow).where(UsageEventRow.message_id == "msg_agent_1")).one()
     assert ev.is_agent and ev.run_id == f"r{run.id}" and ev.project_id == "demo" and ev.source == "agent"
     _ = T0
+
+
+# ---------------------------------------------------------------- project overrides and continuation (ADR 0008)
+
+
+def set_runner(env: Env, **changes: object) -> None:
+    _, h = repo.ProjectFiles(env.folder).read(repo.DocName.PROJECT)
+    env.projects.update_settings("demo", changes, h)  # type: ignore[arg-type]
+
+
+def more_agent(seen: dict[str, object]):  # type: ignore[no-untyped-def]
+    """A continuation: checks it is on the parent's branch with the parent's commit, then adds one."""
+
+    def agent(ws: Path, argv: list[str], prompt: str, secrets: dict[str, str]) -> list[str]:
+        seen["argv"], seen["prompt"] = argv, prompt
+        seen["branch"] = git(ws, "rev-parse", "--abbrev-ref", "HEAD").strip()
+        seen["hello"] = (ws / "hello.txt").exists()
+        (ws / "more.txt").write_text("more\n")
+        git(ws, "add", "-A")
+        git(ws, "-c", "user.name=Agent", "-c", "user.email=a@a.invalid", "commit", "-q", "-m", "feat: more")
+        return [init(), limits(93, 7), result(report_block())]
+
+    return agent
+
+
+async def test_project_overrides_set_effort_caps_and_turns(env: Env) -> None:
+    set_runner(env, model="opus", effort="high", max_five_hour_pct=90, max_turns=80, run_timeout_minutes=90)
+    pf = env.svc.preflight("demo", "T-001")
+    assert (pf.model, pf.effort, pf.max_turns, pf.cap_five_hour_pct, pf.timeout_minutes) == (
+        "opus",
+        "high",
+        80,
+        90,
+        90,
+    )
+    assert pf.budget_pct == pytest.approx(80.0)  # 90% cap minus 10% used
+    env.runtime.agents.append(hello_agent(five=88.0))  # above the global 85%, below this project's 90%
+    run = await run_to_end(env)
+    argv = next(c.args for c in env.runtime.calls if c.kind == "exec_stream")["argv"]
+    assert argv[argv.index("--effort") + 1] == "high" and argv[argv.index("--model") + 1] == "opus"
+    assert argv[argv.index("--max-turns") + 1] == "80"
+    assert run.exit_reason == "completed" and not env.runtime.signals
+    assert (run.effort, run.cap_five_hour_pct, run.timeout_minutes) == ("high", 90, 90)
+
+
+async def test_no_effort_flag_by_default(env: Env) -> None:
+    env.runtime.agents.append(hello_agent())
+    await run_to_end(env)
+    argv = next(c.args for c in env.runtime.calls if c.kind == "exec_stream")["argv"]
+    assert "--effort" not in argv
+
+
+async def test_capped_run_asks_and_continues_on_the_same_branch(env: Env) -> None:
+    set_runner(env, max_five_hour_pct=90)
+    env.runtime.agents.append(hello_agent(final="no json", five=91.0))
+    first = await run_to_end(env)
+    assert first.exit_reason == "budget_exhausted" and first.state == "awaiting_feedback"
+    from surplus.runner.service import can_continue
+
+    assert can_continue(first)
+    first_head = git(env.folder, "rev-parse", first.branch or "").strip()
+
+    seen: dict[str, object] = {}
+    env.runtime.agents.append(more_agent(seen))
+    child = await env.svc.continue_run(first.id, 95)
+    await asyncio.wait_for(env.svc._tasks[child.id], 30)
+    child = env.svc.get(child.id)
+    parent = env.svc.get(first.id)
+
+    assert (parent.state, parent.resolution) == ("done", "continued")
+    assert env.svc.continuation_of(first.id) == child.id
+    assert child.parent_run_id == first.id and child.cap_five_hour_pct == 95
+    argv = seen["argv"]
+    assert isinstance(argv, list) and argv[argv.index("--resume") + 1] == "sess-1"
+    assert "allowed you to continue" in str(seen["prompt"]) and "95%" in str(seen["prompt"])
+    assert seen["branch"] == first.branch and seen["hello"] is True
+    # The continuation ran to the end (93% < its 95% cap) and moved the same branch forward.
+    assert child.state == "awaiting_feedback" and child.exit_reason == "completed", child.error
+    assert child.branch == first.branch and child.base_sha == first.base_sha
+    assert child.commits == 2  # counted from the first run's base
+    log = git(env.folder, "log", "--format=%s", child.branch or "").splitlines()
+    assert log[:2] == ["feat: more", "feat: say hello"]
+    assert git(env.folder, "merge-base", "--is-ancestor", first_head, child.branch or "") == ""
+    # The session was carried over, and the continuation can be merged like any run.
+    assert (env.svc.run_dir(child.id) / "claude").is_dir()
+    merged = await env.svc.merge(child.id)
+    assert merged.resolution == "merged" and (env.folder / "more.txt").exists()
+
+
+async def test_continue_needs_a_higher_cap_and_a_stopped_run(env: Env) -> None:
+    env.runtime.agents.append(hello_agent(final="no json", five=86.0))
+    capped = await run_to_end(env)
+    assert capped.exit_reason == "budget_exhausted"
+    with pytest.raises(PreflightError, match="must be above the current 86%"):
+        await env.svc.continue_run(capped.id, 86)
+    await env.svc.discard(capped.id)
+    with pytest.raises(RunActionError, match="cannot be continued"):
+        await env.svc.continue_run(capped.id, 95)
+
+    _, h = repo.ProjectFiles(env.folder).read(repo.DocName.BACKLOG)
+    env.projects.add_task("demo", h, "Another", priority=1, size=bl.Size.S, acceptance="")
+    env.clock.advance(timedelta(minutes=1))
+    add_readings(env.sm, env.clock)
+    env.runtime.agents.append(hello_agent())
+    another = next(
+        t for t in bl.parse((env.folder / ".surplus/backlog.md").read_text()).items if t.title == "Another"
+    )
+    done = await run_to_end(env, another.id)
+    assert done.exit_reason == "completed"
+    with pytest.raises(RunActionError, match="cannot be continued"):
+        await env.svc.continue_run(done.id, 95)
+
+
+def test_fetch_update_only_fast_forwards(tmp_path: Path) -> None:
+    from surplus.runner import gitops
+
+    project = tmp_path / "p"
+    project.mkdir()
+    git(project, "init", "-q", "-b", "main")
+    (project / "a").write_text("a")
+    git(project, "add", "-A")
+    git(project, "commit", "-q", "-m", "a")
+    git(project, "branch", "feature")
+    clone = tmp_path / "c"
+    gitops.prepare_clone(project, clone, "feature", existing=True)
+    (clone / "b").write_text("b")
+    git(clone, "add", "-A")
+    git(clone, "commit", "-q", "-m", "b")
+    assert gitops.fetch_branch(project, clone, "feature", update=True)  # fast-forward: fine
+    git(clone, "reset", "-q", "--hard", "HEAD~1")
+    (clone / "c").write_text("c")
+    git(clone, "add", "-A")
+    git(clone, "commit", "-q", "-m", "rewritten history")
+    with pytest.raises(gitops.GitError):
+        gitops.fetch_branch(project, clone, "feature", update=True)  # non-fast-forward: refused
+    assert git(project, "log", "--format=%s", "-1", "feature").strip() == "b"

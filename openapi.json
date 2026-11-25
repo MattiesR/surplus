@@ -1354,6 +1354,79 @@
         }
       }
     },
+    "/api/runs/{run_id}/continue": {
+      "post": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Continue Run",
+        "description": "The user's permission to go on after a run stopped at its cap, turn or time limit (ADR 0008).",
+        "operationId": "continue_run_api_runs__run_id__continue_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContinueIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/surplus__api__runs__ErrorOut"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/surplus__api__runs__ErrorOut"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/surplus__api__runs__ErrorOut"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "summary": "Health",
@@ -1598,6 +1671,22 @@
           "age_seconds"
         ],
         "title": "BucketOut"
+      },
+      "ContinueIn": {
+        "properties": {
+          "max_five_hour_pct": {
+            "type": "number",
+            "maximum": 100.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Max Five Hour Pct",
+            "description": "Hard stop for the continuation, in %"
+          }
+        },
+        "type": "object",
+        "required": [
+          "max_five_hour_pct"
+        ],
+        "title": "ContinueIn"
       },
       "CreateProjectIn": {
         "properties": {
@@ -1969,6 +2058,29 @@
             "type": "integer",
             "title": "Max Turns"
           },
+          "effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effort"
+          },
+          "cap_five_hour_pct": {
+            "type": "number",
+            "title": "Cap Five Hour Pct"
+          },
+          "cap_weekly_pct": {
+            "type": "number",
+            "title": "Cap Weekly Pct"
+          },
+          "timeout_minutes": {
+            "type": "integer",
+            "title": "Timeout Minutes"
+          },
           "image": {
             "type": "boolean",
             "title": "Image"
@@ -1982,6 +2094,10 @@
           "budget_pct",
           "model",
           "max_turns",
+          "effort",
+          "cap_five_hour_pct",
+          "cap_weekly_pct",
+          "timeout_minutes",
           "image"
         ],
         "title": "PreflightOut"
@@ -2137,6 +2253,61 @@
               }
             ],
             "title": "Test Command"
+          },
+          "effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effort"
+          },
+          "max_turns": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Turns"
+          },
+          "run_timeout_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Timeout Minutes"
+          },
+          "max_five_hour_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Five Hour Pct"
+          },
+          "max_weekly_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Weekly Pct"
           },
           "description_md": {
             "type": "string",
@@ -2439,6 +2610,68 @@
             "type": "boolean",
             "title": "Base Dirty"
           },
+          "effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effort"
+          },
+          "cap_five_hour_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cap Five Hour Pct",
+            "description": "This run's 5-hour hard stop, in %"
+          },
+          "cap_weekly_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cap Weekly Pct"
+          },
+          "timeout_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeout Minutes"
+          },
+          "parent_run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Run Id",
+            "description": "Set on a continuation: the run it carries on"
+          },
+          "can_continue": {
+            "type": "boolean",
+            "title": "Can Continue",
+            "description": "Stopped by its cap, turns or time; the user may let it continue"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -2467,6 +2700,18 @@
               }
             ],
             "title": "Ended At"
+          },
+          "continued_by": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Continued By",
+            "description": "The continuation started from this run, if any"
           },
           "report": {
             "anyOf": [
@@ -2516,9 +2761,16 @@
           "resolution",
           "error",
           "base_dirty",
+          "effort",
+          "cap_five_hour_pct",
+          "cap_weekly_pct",
+          "timeout_minutes",
+          "parent_run_id",
+          "can_continue",
           "created_at",
           "started_at",
           "ended_at",
+          "continued_by",
           "report",
           "report_path",
           "test_output"
@@ -2566,6 +2818,24 @@
               }
             ],
             "title": "Max Turns"
+          },
+          "effort": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high",
+                  "xhigh",
+                  "max"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effort"
           }
         },
         "type": "object",
@@ -2741,6 +3011,68 @@
             "type": "boolean",
             "title": "Base Dirty"
           },
+          "effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effort"
+          },
+          "cap_five_hour_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cap Five Hour Pct",
+            "description": "This run's 5-hour hard stop, in %"
+          },
+          "cap_weekly_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cap Weekly Pct"
+          },
+          "timeout_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeout Minutes"
+          },
+          "parent_run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Run Id",
+            "description": "Set on a continuation: the run it carries on"
+          },
+          "can_continue": {
+            "type": "boolean",
+            "title": "Can Continue",
+            "description": "Stopped by its cap, turns or time; the user may let it continue"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -2793,6 +3125,12 @@
           "resolution",
           "error",
           "base_dirty",
+          "effort",
+          "cap_five_hour_pct",
+          "cap_weekly_pct",
+          "timeout_minutes",
+          "parent_run_id",
+          "can_continue",
           "created_at",
           "started_at",
           "ended_at"
@@ -2979,6 +3317,90 @@
             "type": "boolean",
             "title": "Clear Test Command",
             "default": false
+          },
+          "effort": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high",
+                  "xhigh",
+                  "max"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effort"
+          },
+          "max_turns": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 200.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Turns"
+          },
+          "run_timeout_minutes": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 240.0,
+                "minimum": 5.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Timeout Minutes"
+          },
+          "max_five_hour_pct": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 95.0,
+                "minimum": 10.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Five Hour Pct"
+          },
+          "max_weekly_pct": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 95.0,
+                "minimum": 10.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Weekly Pct"
+          },
+          "reset": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "effort",
+                "max_turns",
+                "run_timeout_minutes",
+                "max_five_hour_pct",
+                "max_weekly_pct"
+              ]
+            },
+            "type": "array",
+            "title": "Reset"
           }
         },
         "type": "object",

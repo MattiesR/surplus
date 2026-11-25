@@ -20,6 +20,8 @@ export type RunLogEntry = S["LogEntryOut"];
 export type RunReport = S["RunReport"];
 export type Preflight = S["PreflightOut"];
 export type RunIn = S["RunIn"];
+export type Effort = NonNullable<RunIn["effort"]>;
+export const EFFORTS: Effort[] = ["low", "medium", "high", "xhigh", "max"];
 export type DocName = "project" | "goals" | "backlog" | "decisions";
 
 export class ApiError extends Error {
@@ -98,6 +100,8 @@ export const api = {
   runDiff: (id: number) => request<{ text: string; truncated: boolean }>(`/api/runs/${id}/diff`),
   preflight: (body: RunIn) => request<Preflight>("/api/runs/preflight", json("POST", body)),
   startRun: (body: RunIn) => request<Run>("/api/runs", json("POST", body)),
+  continueRun: (id: number, maxFiveHourPct: number) =>
+    request<Run>(`/api/runs/${id}/continue`, json("POST", { max_five_hour_pct: maxFiveHourPct })),
   runAction: (id: number, action: "stop" | "cancel" | "merge" | "discard") =>
     request<Run>(`/api/runs/${id}/${action}`, { method: "POST" }),
 };

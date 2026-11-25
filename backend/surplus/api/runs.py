@@ -17,6 +17,7 @@ from surplus.runner.service import (
     RunActionError,
     RunNotFoundError,
     RunService,
+    can_continue,
     run_name,
 )
 
@@ -49,12 +50,19 @@ class RunOut(BaseModel):
     resolution: str | None
     error: str | None
     base_dirty: bool
+    effort: str | None
+    cap_five_hour_pct: float | None = Field(description="This run's 5-hour hard stop, in %")
+    cap_weekly_pct: float | None
+    timeout_minutes: int | None
+    parent_run_id: int | None = Field(description="Set on a continuation: the run it carries on")
+    can_continue: bool = Field(description="Stopped by its cap, turns or time; the user may let it continue")
     created_at: datetime
     started_at: datetime | None
     ended_at: datetime | None
 
 
 class RunDetailOut(RunOut):
+    continued_by: int | None = Field(description="The continuation started from this run, if any")
     report: RunReport | None
     report_path: str | None
     test_output: str
@@ -78,6 +86,11 @@ class RunIn(BaseModel):
     task_id: str = Field(pattern=r"^T-\d{3,}$")
     model: Literal["haiku", "sonnet", "opus"] | None = None
     max_turns: int | None = Field(default=None, ge=1, le=200)
+    effort: Literal["low", "medium", "high", "xhigh", "max"] | None = None
+
+
+class ContinueIn(BaseModel):
+    max_five_hour_pct: float = Field(gt=0, le=100, description="Hard stop for the continuation, in %")
 
 
 class PreflightOut(BaseModel):
@@ -87,6 +100,10 @@ class PreflightOut(BaseModel):
     budget_pct: float | None = Field(description="Room in the 5-hour window before the hard stop, in pp")
     model: str
     max_turns: int
+    effort: str | None
+    cap_five_hour_pct: float
+    cap_weekly_pct: float
+    timeout_minutes: int
     image: bool
 
 
@@ -117,6 +134,12 @@ def _out(row: RunRow) -> RunOut:
         resolution=row.resolution,
         error=row.error,
         base_dirty=row.base_dirty,
+        effort=row.effort,
+        cap_five_hour_pct=row.cap_five_hour_pct,
+        cap_weekly_pct=row.cap_weekly_pct,
+        timeout_minutes=row.timeout_minutes,
+        parent_run_id=row.parent_run_id,
+        can_continue=can_continue(row),
         created_at=row.created_at,
         started_at=row.started_at,
         ended_at=row.ended_at,
@@ -149,6 +172,7 @@ def get_run(request: Request, run_id: int) -> RunDetailOut:
     rep = RunReport.model_validate(json.loads(row.report_json)) if row.report_json else None
     return RunDetailOut(
         **_out(row).model_dump(),
+        continued_by=svc.continuation_of(run_id),
         report=rep,
         report_path=row.report_path,
         test_output=svc.test_output(run_id)[-20_000:],
@@ -177,7 +201,7 @@ def run_diff(request: Request, run_id: int) -> DiffOut:
 async def preflight(request: Request, body: RunIn) -> PreflightOut:
     svc = _svc(request)
     try:
-        pf = svc.preflight(body.project_id, body.task_id, body.model)
+        pf = svc.preflight(body.project_id, body.task_id, body.model, body.effort)
     except NotFoundError:
         raise HTTPException(404, f"no project {body.project_id}") from None
     image = await svc.runtime.image_exists(svc.settings.runner_image)
@@ -191,6 +215,10 @@ async def preflight(request: Request, body: RunIn) -> PreflightOut:
         budget_pct=pf.budget_pct,
         model=pf.model,
         max_turns=body.max_turns or pf.max_turns,
+        effort=pf.effort,
+        cap_five_hour_pct=pf.cap_five_hour_pct,
+        cap_weekly_pct=pf.cap_weekly_pct,
+        timeout_minutes=pf.timeout_minutes,
         image=image,
     )
 
@@ -198,7 +226,9 @@ async def preflight(request: Request, body: RunIn) -> PreflightOut:
 @router.post("/runs", status_code=201, responses=ERRORS)
 async def start_run(request: Request, body: RunIn) -> RunOut:
     try:
-        row = await _svc(request).start(body.project_id, body.task_id, body.model, body.max_turns)
+        row = await _svc(request).start(
+            body.project_id, body.task_id, body.model, body.max_turns, body.effort
+        )
     except NotFoundError:
         raise HTTPException(404, f"no project {body.project_id}") from None
     except PreflightError as exc:
@@ -246,3 +276,16 @@ async def discard_run(request: Request, run_id: int) -> RunOut:
         return _out(await svc.discard(run_id))
     except RunActionError as exc:
         raise HTTPException(409, str(exc)) from None
+
+
+@router.post("/runs/{run_id}/continue", status_code=201, responses=ERRORS)
+async def continue_run(request: Request, run_id: int, body: ContinueIn) -> RunOut:
+    """The user's permission to go on after a run stopped at its cap, turn or time limit (ADR 0008)."""
+    svc = _svc(request)
+    _get(svc, run_id)
+    try:
+        return _out(await svc.continue_run(run_id, body.max_five_hour_pct))
+    except RunActionError as exc:
+        raise HTTPException(409, str(exc)) from None
+    except PreflightError as exc:
+        raise HTTPException(409, {"detail": "run not continued", "problems": exc.problems}) from None

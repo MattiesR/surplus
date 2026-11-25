@@ -98,3 +98,23 @@ def compose(
 def branch_name(task: BacklogItem) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", task.title.lower()).strip("-")[:40].rstrip("-")
     return f"surplus/{task.id}-{slug}" if slug else f"surplus/{task.id}"
+
+
+STOP_EXPLANATIONS = {
+    "budget_exhausted": "it reached the 5-hour hard stop",
+    "max_turns": "it used all its turns",
+    "timeout": "it reached the wall-clock limit",
+}
+
+
+def continuation_prompt(task: BacklogItem, exit_reason: str, cap_five_hour_pct: float, max_turns: int) -> str:
+    """The user message that resumes a stopped run's session after the user allowed it to continue."""
+    why = STOP_EXPLANATIONS.get(exit_reason, "it was stopped")
+    return (
+        f"Your previous run on {task.id} was stopped because {why}. Surplus committed and tested what you "
+        "had (any uncommitted files were committed for you), and the user has now allowed you to continue: "
+        f"the 5-hour hard stop for this continuation is {cap_five_hour_pct:.0f}%, and you have {max_turns} "
+        "more turns. Check `git log` and `git status`, continue the task from where you stopped, commit your "
+        "work, and end with the report JSON block exactly as the rules describe. The report covers the whole "
+        "task, including what the previous run did."
+    )

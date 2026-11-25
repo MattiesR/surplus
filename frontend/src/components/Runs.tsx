@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { api, ApiError, type Run, type Task } from "../api/client";
+import { api, ApiError, EFFORTS, type Effort, type Run, type Task } from "../api/client";
 import { since } from "../lib/format";
 import { Link, navigate } from "../lib/router";
 
@@ -111,14 +111,21 @@ const MODELS = ["haiku", "sonnet", "opus"] as const;
 export function RunNow({ projectId, task, onClose }: { projectId: string; task: Task; onClose: () => void }) {
   const [model, setModel] = useState<(typeof MODELS)[number] | null>(null);
   const [turns, setTurns] = useState<number | null>(null);
+  const [effort, setEffort] = useState<Effort | null>(null);
   const pf = useQuery({
-    queryKey: ["preflight", projectId, task.id, model],
-    queryFn: () => api.preflight({ project_id: projectId, task_id: task.id, model }),
+    queryKey: ["preflight", projectId, task.id, model, effort],
+    queryFn: () => api.preflight({ project_id: projectId, task_id: task.id, model, effort }),
     staleTime: 0,
   });
   const start = useMutation({
     mutationFn: () =>
-      api.startRun({ project_id: projectId, task_id: task.id, model: model ?? undefined, max_turns: turns ?? undefined }),
+      api.startRun({
+        project_id: projectId,
+        task_id: task.id,
+        model: model ?? undefined,
+        max_turns: turns ?? undefined,
+        effort: effort ?? undefined,
+      }),
     onSuccess: (run) => navigate(`/runs/${run.id}`),
   });
   const data = pf.data;
@@ -168,6 +175,19 @@ export function RunNow({ projectId, task, onClose }: { projectId: string; task: 
               </select>
             </label>
             <label className="flex flex-col text-xs muted">
+              Effort
+              <select
+                className="field mt-1"
+                value={effort ?? data.effort ?? ""}
+                onChange={(e) => setEffort((e.target.value || null) as Effort | null)}
+              >
+                <option value="">CLI default</option>
+                {EFFORTS.map((x) => (
+                  <option key={x}>{x}</option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col text-xs muted">
               Max turns
               <input
                 className="field mt-1 w-20"
@@ -180,7 +200,7 @@ export function RunNow({ projectId, task, onClose }: { projectId: string; task: 
             </label>
             <p className="text-xs muted">
               {data.budget_pct != null
-                ? `Uses your subscription. Hard stop when the 5-hour window reaches its cap: ${data.budget_pct.toFixed(0)} pp left.`
+                ? `Uses your subscription. Hard stop at ${data.cap_five_hour_pct.toFixed(0)}% of the 5-hour window: ${data.budget_pct.toFixed(0)} pp left; you are asked before it goes further.`
                 : "Uses your subscription."}
             </p>
           </div>

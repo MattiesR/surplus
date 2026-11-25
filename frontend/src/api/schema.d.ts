@@ -313,6 +313,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/runs/{run_id}/continue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Continue Run
+         * @description The user's permission to go on after a run stopped at its cap, turn or time limit (ADR 0008).
+         */
+        post: operations["continue_run_api_runs__run_id__continue_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -459,6 +479,14 @@ export interface components {
             /** Age Seconds */
             age_seconds: number;
         };
+        /** ContinueIn */
+        ContinueIn: {
+            /**
+             * Max Five Hour Pct
+             * @description Hard stop for the continuation, in %
+             */
+            max_five_hour_pct: number;
+        };
         /** CreateProjectIn */
         CreateProjectIn: {
             /** Name */
@@ -599,6 +627,14 @@ export interface components {
             model: string;
             /** Max Turns */
             max_turns: number;
+            /** Effort */
+            effort: string | null;
+            /** Cap Five Hour Pct */
+            cap_five_hour_pct: number;
+            /** Cap Weekly Pct */
+            cap_weekly_pct: number;
+            /** Timeout Minutes */
+            timeout_minutes: number;
             /** Image */
             image: boolean;
         };
@@ -656,6 +692,16 @@ export interface components {
             max_share_of_surplus: number;
             /** Test Command */
             test_command: string | null;
+            /** Effort */
+            effort?: string | null;
+            /** Max Turns */
+            max_turns?: number | null;
+            /** Run Timeout Minutes */
+            run_timeout_minutes?: number | null;
+            /** Max Five Hour Pct */
+            max_five_hour_pct?: number | null;
+            /** Max Weekly Pct */
+            max_weekly_pct?: number | null;
             /** Description Md */
             description_md: string;
             /** Goals */
@@ -733,6 +779,27 @@ export interface components {
             error: string | null;
             /** Base Dirty */
             base_dirty: boolean;
+            /** Effort */
+            effort: string | null;
+            /**
+             * Cap Five Hour Pct
+             * @description This run's 5-hour hard stop, in %
+             */
+            cap_five_hour_pct: number | null;
+            /** Cap Weekly Pct */
+            cap_weekly_pct: number | null;
+            /** Timeout Minutes */
+            timeout_minutes: number | null;
+            /**
+             * Parent Run Id
+             * @description Set on a continuation: the run it carries on
+             */
+            parent_run_id: number | null;
+            /**
+             * Can Continue
+             * @description Stopped by its cap, turns or time; the user may let it continue
+             */
+            can_continue: boolean;
             /**
              * Created At
              * Format: date-time
@@ -742,6 +809,11 @@ export interface components {
             started_at: string | null;
             /** Ended At */
             ended_at: string | null;
+            /**
+             * Continued By
+             * @description The continuation started from this run, if any
+             */
+            continued_by: number | null;
             report: components["schemas"]["RunReport"] | null;
             /** Report Path */
             report_path: string | null;
@@ -758,6 +830,8 @@ export interface components {
             model?: ("haiku" | "sonnet" | "opus") | null;
             /** Max Turns */
             max_turns?: number | null;
+            /** Effort */
+            effort?: ("low" | "medium" | "high" | "xhigh" | "max") | null;
         };
         /** RunOut */
         RunOut: {
@@ -801,6 +875,27 @@ export interface components {
             error: string | null;
             /** Base Dirty */
             base_dirty: boolean;
+            /** Effort */
+            effort: string | null;
+            /**
+             * Cap Five Hour Pct
+             * @description This run's 5-hour hard stop, in %
+             */
+            cap_five_hour_pct: number | null;
+            /** Cap Weekly Pct */
+            cap_weekly_pct: number | null;
+            /** Timeout Minutes */
+            timeout_minutes: number | null;
+            /**
+             * Parent Run Id
+             * @description Set on a continuation: the run it carries on
+             */
+            parent_run_id: number | null;
+            /**
+             * Can Continue
+             * @description Stopped by its cap, turns or time; the user may let it continue
+             */
+            can_continue: boolean;
             /**
              * Created At
              * Format: date-time
@@ -868,6 +963,18 @@ export interface components {
              * @default false
              */
             clear_test_command: boolean;
+            /** Effort */
+            effort?: ("low" | "medium" | "high" | "xhigh" | "max") | null;
+            /** Max Turns */
+            max_turns?: number | null;
+            /** Run Timeout Minutes */
+            run_timeout_minutes?: number | null;
+            /** Max Five Hour Pct */
+            max_five_hour_pct?: number | null;
+            /** Max Weekly Pct */
+            max_weekly_pct?: number | null;
+            /** Reset */
+            reset?: ("effort" | "max_turns" | "run_timeout_minutes" | "max_five_hour_pct" | "max_weekly_pct")[];
         };
         /** SourceOut */
         SourceOut: {
@@ -2058,6 +2165,59 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["surplus__api__runs__ErrorOut"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["surplus__api__runs__ErrorOut"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["surplus__api__runs__ErrorOut"];
+                };
+            };
+        };
+    };
+    continue_run_api_runs__run_id__continue_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContinueIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };

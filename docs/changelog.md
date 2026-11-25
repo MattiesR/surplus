@@ -1,12 +1,23 @@
 # Changelog
 
+## Unreleased — per-project runner settings and "ask to continue" · 2026-11-25
+
+**Added**
+- Per-project runner settings in `project.md` (ADR 0008): `effort` (→ `claude --effort`), `max_turns`,
+  `run_timeout_minutes`, `max_five_hour_pct`, `max_weekly_pct`; editable in the Settings tab; the Run panel
+  shows the effort and the project's hard stop. Runs store the limits they started with (migration `0004`).
+- A run stopped by its hard stop, turn limit or time limit asks for permission to continue. "Allow and
+  continue to N%" starts a continuation that resumes the same session on the same branch (fast-forward only);
+  `POST /api/runs/{id}/continue`. Never automatic.
+- Surplus registered as its own project (priority 1, Opus, high effort, 90% stop), with the Phase 4 backlog.
+- Runner image: Node 22 LTS and uv-managed Python 3.12/3.13, so projects like Surplus itself can be verified.
+
 ## Phase 3 — Runner and sandbox · 2026-11-25
 
 **Added**
 - Phase 0 gate: spikes 3–4 completed (`docs/spikes/03-04-container-and-sandbox.md`): setup-token auth works in a
   rootless container; nested bubblewrap does not (ADR 0003 accepted); Podman's default network reaches the LAN.
-- Runner image `runner-image/Containerfile` (Debian slim, git, build tools, Node 22 LTS, uv with Python 3.12/3.13
-  preinstalled; 877 MB), built with
+- Runner image `runner-image/Containerfile` (Debian slim, git, Python, Node, uv, build tools; 730 MB), built with
   `surplus runner build` / `make runner-image`. The host's CLI binary is mounted read-only (ADR 0006).
 - Isolation (`runner/container.py`): rootless Podman, agent = host uid via `--userns=keep-id` (never root),
   read-only root fs, tmpfs `/tmp` and home, `--cap-drop=all`, `no-new-privileges`, `--init`, memory/CPU/pids caps,

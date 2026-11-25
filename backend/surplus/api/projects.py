@@ -96,6 +96,11 @@ class ProjectDetail(BaseModel):
     model: str
     max_share_of_surplus: float
     test_command: str | None
+    effort: str | None = None
+    max_turns: int | None = None
+    run_timeout_minutes: int | None = None
+    max_five_hour_pct: float | None = None
+    max_weekly_pct: float | None = None
     description_md: str
     goals: list[GoalOut]
     backlog: list[TaskOut] | None
@@ -141,6 +146,15 @@ class SettingsIn(BaseModel):
     max_share_of_surplus: float | None = Field(default=None, gt=0, le=1)
     test_command: str | None = Field(default=None, max_length=300)
     clear_test_command: bool = False
+    # Runner overrides (ADR 0008); names in `reset` go back to the global defaults.
+    effort: Literal["low", "medium", "high", "xhigh", "max"] | None = None
+    max_turns: int | None = Field(default=None, ge=1, le=200)
+    run_timeout_minutes: int | None = Field(default=None, ge=5, le=240)
+    max_five_hour_pct: float | None = Field(default=None, ge=10, le=95)
+    max_weekly_pct: float | None = Field(default=None, ge=10, le=95)
+    reset: list[
+        Literal["effort", "max_turns", "run_timeout_minutes", "max_five_hour_pct", "max_weekly_pct"]
+    ] = Field(default_factory=list)
 
 
 class TaskIn(BaseModel):
@@ -204,6 +218,11 @@ def _detail(pid: str, snap: repo.ProjectSnapshot) -> ProjectDetail:
         model=meta.model if meta else "sonnet",
         max_share_of_surplus=meta.max_share_of_surplus if meta else 0.5,
         test_command=meta.test_command if meta else None,
+        effort=meta.effort if meta else None,
+        max_turns=meta.max_turns if meta else None,
+        run_timeout_minutes=meta.run_timeout_minutes if meta else None,
+        max_five_hour_pct=meta.max_five_hour_pct if meta else None,
+        max_weekly_pct=meta.max_weekly_pct if meta else None,
         description_md=snap.description_md,
         goals=[GoalOut(id=g.id, title=g.title, acceptance=g.acceptance) for g in snap.goals.goals],
         backlog=None
@@ -370,9 +389,11 @@ def write_doc(project_id: str, doc: Doc, body: WriteDocIn, request: Request) -> 
     },
 )
 def update_settings(project_id: str, body: SettingsIn, request: Request) -> HashOut | JSONResponse:
-    changes = body.model_dump(exclude={"base_hash", "clear_test_command"}, exclude_none=True)
+    changes = body.model_dump(exclude={"base_hash", "clear_test_command", "reset"}, exclude_none=True)
     if body.clear_test_command:
         changes["test_command"] = None
+    for key in body.reset:
+        changes[key] = None
     try:
         return HashOut(hash=_svc(request).update_settings(project_id, changes, body.base_hash))
     except HANDLED as exc:

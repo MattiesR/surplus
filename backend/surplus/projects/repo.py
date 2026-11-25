@@ -15,6 +15,7 @@ import tempfile
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, Field, ValidationError
 
@@ -42,6 +43,10 @@ class ProjectStatus(StrEnum):
     ARCHIVED = "archived"
 
 
+Effort = Literal["low", "medium", "high", "xhigh", "max"]
+EFFORTS: tuple[str, ...] = ("low", "medium", "high", "xhigh", "max")
+
+
 class ProjectMeta(BaseModel):
     """project.md front matter. Unknown keys are preserved in the file but ignored here."""
 
@@ -52,6 +57,12 @@ class ProjectMeta(BaseModel):
     model: str = Field(default="sonnet", pattern=r"^(haiku|sonnet|opus)$")
     max_share_of_surplus: float = Field(default=0.5, gt=0, le=1)
     test_command: str | None = None
+    # Runner overrides for this project (ADR 0008). Unset = the global defaults in Settings.
+    effort: Effort | None = None
+    max_turns: int | None = Field(default=None, ge=1, le=200)
+    run_timeout_minutes: int | None = Field(default=None, ge=5, le=240)
+    max_five_hour_pct: float | None = Field(default=None, ge=10, le=95)
+    max_weekly_pct: float | None = Field(default=None, ge=10, le=95)
 
 
 class ConflictError(Exception):

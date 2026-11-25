@@ -180,9 +180,16 @@ class RunRow(Base):
     report_source: Mapped[str | None] = mapped_column(String, nullable=True)  # agent|repaired|fallback
     report_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     report_path: Mapped[str | None] = mapped_column(String, nullable=True)
-    resolution: Mapped[str | None] = mapped_column(String, nullable=True)  # merged|discarded
+    resolution: Mapped[str | None] = mapped_column(String, nullable=True)  # merged|discarded|continued
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     base_dirty: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Limits this run was started with (project overrides or global defaults; ADR 0008).
+    effort: Mapped[str | None] = mapped_column(String, nullable=True)
+    cap_five_hour_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cap_weekly_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    timeout_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # A continuation resumes the parent's session on the parent's branch after the user allowed it.
+    parent_run_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime)
     started_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)

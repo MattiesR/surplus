@@ -67,6 +67,10 @@ class Preflight:
     budget_pct: float | None
     model: str
     max_turns: int
+    effort: str | None = None
+    cap_five_hour_pct: float = 85.0
+    cap_weekly_pct: float = 90.0
+    timeout_minutes: int = 45
 
     @property
     def ok(self) -> bool:
@@ -79,12 +83,25 @@ class _Live:
 
     stop_reason: ExitReason | None = None
     stop_detail: str | None = None
+    limits: Limits | None = None
     seq: int = 0
     stream: StreamState = field(default_factory=StreamState)
 
 
 def run_name(run_id: int) -> str:
     return f"r{run_id}"
+
+
+# A run stopped for one of these reasons may be continued, but only when the user allows it (ADR 0008).
+CONTINUABLE = frozenset({ExitReason.BUDGET.value, ExitReason.MAX_TURNS.value, ExitReason.TIMEOUT.value})
+
+
+def can_continue(row: RunRow) -> bool:
+    return (
+        row.state == RunState.AWAITING_FEEDBACK.value
+        and row.exit_reason in CONTINUABLE
+        and bool(row.session_id)
+    )
 
 
 class RunService:
@@ -183,12 +200,25 @@ class RunService:
 
     # ------------------------------------------------------------------ preflight
 
-    def preflight(self, project_id: str, task_id: str, model: str | None = None) -> Preflight:
+    def project_limits(self, meta: repo.ProjectMeta | None) -> Limits:
+        """The project's hard stops (ADR 0008), else the global ones."""
+        five = meta.max_five_hour_pct if meta and meta.max_five_hour_pct is not None else None
+        week = meta.max_weekly_pct if meta and meta.max_weekly_pct is not None else None
+        return Limits(
+            five if five is not None else self.settings.run_max_five_hour_pct,
+            week if week is not None else self.settings.run_max_weekly_pct,
+        )
+
+    def preflight(
+        self, project_id: str, task_id: str, model: str | None = None, effort: str | None = None
+    ) -> Preflight:
         problems: list[str] = []
         warnings: list[str] = []
         snap = self.projects.snapshot(project_id)
         meta = snap.meta
         chosen_model = model or (meta.model if meta else "sonnet")
+        chosen_effort = effort or (meta.effort if meta else None)
+        limits = self.project_limits(meta)
         if meta is None:
             problems.append("project.md has errors; fix them first")
         elif meta.status != repo.ProjectStatus.ACTIVE:
@@ -219,6 +249,28 @@ class RunService:
                 f"uncommitted changes ({', '.join(state.dirty_files[:3])}) are not included: "
                 "the agent works from HEAD"
             )
+        problems += self._runtime_problems(limits)
+        if chosen_model == "opus":
+            warnings.append("opus uses the limits much faster than sonnet")
+        if chosen_effort in ("xhigh", "max"):
+            warnings.append(f"effort {chosen_effort} spends many more tokens per turn")
+        return Preflight(
+            problems,
+            warnings,
+            budget_pct(self.latest_readings(), limits),
+            chosen_model,
+            meta.max_turns if meta and meta.max_turns else self.settings.default_max_turns,
+            chosen_effort,
+            limits.max_five_hour_pct,
+            limits.max_weekly_pct,
+            meta.run_timeout_minutes
+            if meta and meta.run_timeout_minutes
+            else self.settings.run_timeout_minutes,
+        )
+
+    def _runtime_problems(self, limits: Limits) -> list[str]:
+        """Checks shared by a new run and a continuation: concurrency, limits, token, CLI."""
+        problems: list[str] = []
         if self.active_count() >= self.settings.max_concurrent_runs:
             problems.append("another run is in progress")
         readings = self.latest_readings()
@@ -226,7 +278,7 @@ class RunService:
             problems.append(
                 "no fresh reset times from Claude (older than 1 h); runs pause until the probe succeeds"
             )
-        reason = over_limit(readings, self.limits)
+        reason = over_limit(readings, limits)
         if reason:
             problems.append(f"limit: {reason}")
         if not any(r.bucket == FIVE_HOUR for r in readings):
@@ -237,15 +289,7 @@ class RunService:
             )
         if self._claude_bin() is None:
             problems.append("the Claude CLI binary was not found on the host")
-        if chosen_model == "opus":
-            warnings.append("opus uses the limits much faster than sonnet")
-        return Preflight(
-            problems,
-            warnings,
-            budget_pct(readings, self.limits),
-            chosen_model,
-            self.settings.default_max_turns,
-        )
+        return problems
 
     def latest_readings(self) -> list[Any]:
         with self.sm() as session:
@@ -261,14 +305,19 @@ class RunService:
     # ------------------------------------------------------------------ commands
 
     async def start(
-        self, project_id: str, task_id: str, model: str | None = None, max_turns: int | None = None
+        self,
+        project_id: str,
+        task_id: str,
+        model: str | None = None,
+        max_turns: int | None = None,
+        effort: str | None = None,
     ) -> RunRow:
         async with self._start_lock:
             if not await self.runtime.image_exists(self.settings.runner_image):
                 raise PreflightError(
                     [f"runner image {self.settings.runner_image} is missing: run `surplus runner build`"]
                 )
-            pf = await asyncio.to_thread(self.preflight, project_id, task_id, model)
+            pf = await asyncio.to_thread(self.preflight, project_id, task_id, model, effort)
             if not pf.ok:
                 raise PreflightError(pf.problems)
             snap = self.projects.snapshot(project_id)
@@ -284,6 +333,10 @@ class RunService:
                     model=pf.model,
                     max_turns=max_turns or pf.max_turns,
                     budget_pct=pf.budget_pct,
+                    effort=pf.effort,
+                    cap_five_hour_pct=pf.cap_five_hour_pct,
+                    cap_weekly_pct=pf.cap_weekly_pct,
+                    timeout_minutes=pf.timeout_minutes,
                     commits=0,
                     base_dirty=any("uncommitted" in w for w in pf.warnings),
                     created_at=now,
@@ -298,12 +351,94 @@ class RunService:
                 project=project_id,
                 task=task_id,
                 model=pf.model,
+                effort=pf.effort,
+                cap_five_hour_pct=pf.cap_five_hour_pct,
                 budget_pct=pf.budget_pct,
             )
             self._live[run_id] = _Live()
             self._publish_changed(run_id)
             self._tasks[run_id] = asyncio.create_task(self._drive(run_id), name=f"run-{run_id}")
             return self.get(run_id)
+
+    async def continue_run(self, run_id: int, max_five_hour_pct: float) -> RunRow:
+        """The user allowed a run that hit its cap (or its turn or time limit) to go on (ADR 0008).
+
+        Starts a continuation: a new run that resumes the parent's Claude session on the parent's branch, with
+        the hard stop the user chose. The parent is closed as `continued`; its branch lives on in the child.
+        """
+        async with self._start_lock:
+            parent = self.get(run_id)
+            if not can_continue(parent):
+                raise RunActionError(
+                    f"run {run_name(run_id)} cannot be continued (only a run stopped by its cap, turn or "
+                    "time limit, and waiting for feedback, can)"
+                )
+            if not await self.runtime.image_exists(self.settings.runner_image):
+                raise PreflightError([f"runner image {self.settings.runner_image} is missing"])
+            snap = self.projects.snapshot(parent.project_id)
+            limits = Limits(max_five_hour_pct, self.project_limits(snap.meta).max_weekly_pct)
+            five_now = next((r.used_pct for r in self.latest_readings() if r.bucket == FIVE_HOUR), None)
+            problems = self._runtime_problems(limits)
+            if five_now is not None and max_five_hour_pct <= five_now:
+                problems.insert(
+                    0,
+                    f"the new hard stop ({max_five_hour_pct:.0f}%) must be above the current {five_now:.0f}%",
+                )
+            if problems:
+                raise PreflightError(problems)
+            pcfg = self.run_dir(run_id) / "claude"
+            now = self.clock.now()
+            with self.sm.begin() as session:
+                row = RunRow(
+                    project_id=parent.project_id,
+                    task_id=parent.task_id,
+                    task_title=parent.task_title,
+                    state=S.QUEUED.value,
+                    model=parent.model,
+                    max_turns=parent.max_turns,
+                    budget_pct=budget_pct(self.latest_readings(), limits),
+                    effort=parent.effort,
+                    cap_five_hour_pct=max_five_hour_pct,
+                    cap_weekly_pct=limits.max_weekly_pct,
+                    timeout_minutes=parent.timeout_minutes,
+                    parent_run_id=parent.id,
+                    session_id=parent.session_id,
+                    branch=parent.branch,
+                    base_branch=parent.base_branch,
+                    base_sha=parent.base_sha,
+                    commits=0,
+                    base_dirty=False,
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(row)
+                session.flush()
+                child_id = row.id
+            # The child resumes the parent's session: copy its CLI config dir (session transcript included).
+            if pcfg.is_dir():
+                await asyncio.to_thread(
+                    shutil.copytree, pcfg, self.run_dir(child_id) / "claude", dirs_exist_ok=True
+                )
+            self._log(
+                run_id, "surplus", f"continued as {run_name(child_id)} (hard stop {max_five_hour_pct:.0f}%)"
+            )
+            self._finish_feedback(run_id, "continued")
+            log.info(
+                "run.continued",
+                parent=run_id,
+                run=child_id,
+                cap_five_hour_pct=max_five_hour_pct,
+                five_hour_now=five_now,
+                reason=parent.exit_reason,
+            )
+            self._live[child_id] = _Live()
+            self._publish_changed(child_id)
+            self._tasks[child_id] = asyncio.create_task(self._drive(child_id), name=f"run-{child_id}")
+            return self.get(child_id)
+
+    def continuation_of(self, run_id: int) -> int | None:
+        with self.sm() as session:
+            return session.scalar(select(RunRow.id).where(RunRow.parent_run_id == run_id).limit(1))
 
     async def stop(
         self, run_id: int, reason: ExitReason = ExitReason.USER_STOP, detail: str | None = None
@@ -507,10 +642,23 @@ class RunService:
         claude_bin = self._claude_bin()
         if token is None or claude_bin is None:
             raise PreflightError(["token or CLI missing"])
+        live.limits = Limits(
+            row.cap_five_hour_pct if row.cap_five_hour_pct is not None else self.limits.max_five_hour_pct,
+            row.cap_weekly_pct if row.cap_weekly_pct is not None else self.limits.max_weekly_pct,
+        )
+        resume = row.parent_run_id is not None and bool(row.session_id)
         state = await asyncio.to_thread(gitops.repo_state, folder)
-        branch = await asyncio.to_thread(gitops.unique_branch, folder, prompt.branch_name(task))
         await asyncio.to_thread(gitops.snapshot_bundle, folder, rdir / "snapshot.bundle")
-        base_sha = await asyncio.to_thread(gitops.prepare_clone, folder, clone, branch)
+        if resume and row.branch and gitops.branch_exists(folder, row.branch):
+            # Continuation: carry on from the parent's branch; diffs and commits count from the first base.
+            branch = row.branch
+            await asyncio.to_thread(gitops.prepare_clone, folder, clone, branch, True)
+            base_sha = row.base_sha or ""
+            update_branch = True
+        else:
+            branch = await asyncio.to_thread(gitops.unique_branch, folder, prompt.branch_name(task))
+            base_sha = await asyncio.to_thread(gitops.prepare_clone, folder, clone, branch)
+            update_branch = False
         cfg.mkdir(parents=True, exist_ok=True)
         recent = _recent_runs(repo.ProjectFiles(folder).runs_dir)
         composed = prompt.compose(
@@ -528,13 +676,23 @@ class RunService:
             composed.prompt + "\n\n---\n\n" + composed.system_append, encoding="utf-8"
         )
         container = self.container_name(run_id)
-        self._update(run_id, branch=branch, base_branch=state.branch, base_sha=base_sha, container=container)
-        self._log(
-            run_id, "surplus", f"branch {branch} from {state.branch or 'detached HEAD'} @ {base_sha[:10]}"
+        self._update(
+            run_id,
+            branch=branch,
+            base_branch=row.base_branch if update_branch else state.branch,
+            base_sha=base_sha,
+            container=container,
         )
+        if update_branch:
+            self._log(run_id, "surplus", f"continuing {run_name(row.parent_run_id or 0)} on {branch}")
+        else:
+            self._log(
+                run_id, "surplus", f"branch {branch} from {state.branch or 'detached HEAD'} @ {base_sha[:10]}"
+            )
         await self.runtime.ensure_network()
         await self.runtime.ensure_proxy(self.settings.runner_image, self.settings.egress_allow)
-        lifetime = (self.settings.run_timeout_minutes + self.settings.test_timeout_minutes + 15) * 60
+        timeout_minutes = row.timeout_minutes or self.settings.run_timeout_minutes
+        lifetime = (timeout_minutes + self.settings.test_timeout_minutes + 15) * 60
         await self.runtime.start(
             RunContainerSpec(
                 name=container,
@@ -558,11 +716,13 @@ class RunService:
         argv = [
             "claude",
             "-p",
+            *(["--resume", row.session_id] if resume and row.session_id else []),
             "--output-format",
             "stream-json",
             "--verbose",
             "--model",
             row.model,
+            *(["--effort", row.effort] if row.effort else []),
             "--max-turns",
             str(row.max_turns),
             "--permission-mode",
@@ -571,7 +731,16 @@ class RunService:
             "--append-system-prompt",
             composed.system_append,
         ]
-        await self._run_agent(run_id, container, argv, composed.prompt.encode("utf-8"), token)
+        user_prompt = composed.prompt
+        if resume:
+            parent = self.get(row.parent_run_id or 0)
+            user_prompt = prompt.continuation_prompt(
+                task, parent.exit_reason or "", live.limits.max_five_hour_pct, row.max_turns
+            )
+            (rdir / "prompt.md").write_text(
+                user_prompt + "\n\n---\n\n" + composed.system_append, encoding="utf-8"
+            )
+        await self._run_agent(run_id, container, argv, user_prompt.encode("utf-8"), token, timeout_minutes)
         st = live.stream
         exit_reason = live.stop_reason or (
             ExitReason.MAX_TURNS
@@ -608,7 +777,7 @@ class RunService:
             )
             self._log(run_id, "surplus", "committed changes the agent left uncommitted")
         try:
-            head = await asyncio.to_thread(gitops.fetch_branch, folder, clone, branch)
+            head = await asyncio.to_thread(gitops.fetch_branch, folder, clone, branch, update_branch)
         except gitops.GitError as exc:
             # e.g. the agent deleted its clone's .git: nothing to bring back; the project is untouched.
             head = None
@@ -681,18 +850,23 @@ class RunService:
         return container
 
     async def _run_agent(
-        self, run_id: int, container: str, argv: list[str], stdin: bytes, token: str
+        self,
+        run_id: int,
+        container: str,
+        argv: list[str],
+        stdin: bytes,
+        token: str,
+        timeout_minutes: int,
     ) -> None:
         live = self._live[run_id]
+        limits = live.limits or self.limits
         stream = await self.runtime.exec_stream(container, argv, stdin, {TOKEN_ENV: token})
-        timeout = self.settings.run_timeout_minutes * 60
+        timeout = timeout_minutes * 60
 
         async def watchdog() -> None:
             await asyncio.sleep(timeout)
             with contextlib.suppress(RunActionError):
-                await self.stop(
-                    run_id, ExitReason.TIMEOUT, f"wall-clock limit of {self.settings.run_timeout_minutes} min"
-                )
+                await self.stop(run_id, ExitReason.TIMEOUT, f"wall-clock limit of {timeout_minutes} min")
             await asyncio.sleep(self.settings.run_stop_grace_seconds)
             await self.runtime.remove(container)  # last resort: the CLI ignored the stop
 
@@ -711,7 +885,7 @@ class RunService:
                     with self.sm.begin() as session:
                         insert_readings(session, res.readings)
                     self.bus.publish(Event("usage.updated", {"readings": len(res.readings)}))
-                    reason = over_limit(res.readings, self.limits)
+                    reason = over_limit(res.readings, limits)
                     if reason and live.stop_reason is None:
                         await self.stop(run_id, ExitReason.BUDGET, reason)
             rc = await stream.wait()

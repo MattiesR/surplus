@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, ApiError, type RunDetail, type RunLogEntry } from "../api/client";
 import { isActive, RunStateBadge } from "../components/Runs";
 import { since } from "../lib/format";
-import { Link } from "../lib/router";
+import { Link, navigate } from "../lib/router";
 
 /** Called for every `run.log` SSE event: append to the cached log (if this run's log is loaded). */
 export function appendRunLog(qc: QueryClient, id: number, entry: RunLogEntry): void {
@@ -172,6 +172,61 @@ function Diff({ id }: { id: number }) {
   );
 }
 
+const WHY: Record<string, string> = {
+  budget_exhausted: "it reached its 5-hour hard stop",
+  max_turns: "it used all its turns",
+  timeout: "it reached its time limit",
+};
+
+/** The run stopped at a limit: ask the user whether it may go on, and how far (ADR 0008). */
+function ContinuePanel({ run }: { run: RunDetail }) {
+  const cap = run.cap_five_hour_pct ?? 85;
+  const [newCap, setNewCap] = useState(Math.min(100, run.exit_reason === "budget_exhausted" ? cap + 5 : cap));
+  const go = useMutation({
+    mutationFn: () => api.continueRun(run.id, newCap),
+    onSuccess: (child) => navigate(`/runs/${child.id}`),
+  });
+  const err = go.error instanceof ApiError ? go.error : null;
+  return (
+    <section className="card space-y-2 p-4 text-sm" aria-label="Permission to continue" role="region">
+      <h2 className="font-medium">
+        <span aria-hidden style={{ color: "var(--status-warning)" }}>▲</span> The agent stopped because{" "}
+        {WHY[run.exit_reason ?? ""] ?? "it hit a limit"}. Continue?
+      </h2>
+      <p className="text-xs muted">
+        Its work so far is committed, tested and reported below. Continuing resumes the same session on{" "}
+        <code>{run.branch}</code> with a new 5-hour hard stop; the weekly cap stays. Or merge or discard as usual.
+      </p>
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="flex flex-col text-xs muted">
+          New 5-hour hard stop: {newCap}%
+          <input
+            type="range"
+            min={Math.min(100, Math.floor(cap))}
+            max={100}
+            step={1}
+            value={newCap}
+            onChange={(e) => setNewCap(Number(e.target.value))}
+            className="mt-1 w-56"
+          />
+        </label>
+        <button className="btn" onClick={() => go.mutate()} disabled={go.isPending}>
+          {go.isPending ? "Starting…" : `Allow and continue to ${newCap}%`}
+        </button>
+      </div>
+      {newCap >= 98 && (
+        <p className="text-xs">
+          <span aria-hidden style={{ color: "var(--status-warning)" }}>▲</span> At {newCap}% you may have almost
+          nothing left for your own work until the window resets.
+        </p>
+      )}
+      {go.error && (
+        <p role="alert">▲ {err?.problems.length ? err.problems.join("; ") : go.error.message}</p>
+      )}
+    </section>
+  );
+}
+
 export function RunDetailPage({ id }: { id: number }) {
   const qc = useQueryClient();
   const run = useQuery({ queryKey: ["run", id], queryFn: () => api.run(id) });
@@ -252,6 +307,17 @@ export function RunDetailPage({ id }: { id: number }) {
             <span aria-hidden style={{ color: "var(--status-critical)" }}>▲</span> {action.error.message}
           </p>
         )}
+        {r.parent_run_id != null && (
+          <p className="mt-1 text-xs muted">
+            Continues <Link href={`/runs/${r.parent_run_id}`} className="underline">r{r.parent_run_id}</Link> (allowed
+            by you).
+          </p>
+        )}
+        {r.continued_by != null && (
+          <p className="mt-1 text-xs muted">
+            Continued in <Link href={`/runs/${r.continued_by}`} className="underline">r{r.continued_by}</Link>.
+          </p>
+        )}
         {r.error && (
           <p role="alert" className="mt-1 text-sm">
             <span aria-hidden style={{ color: "var(--status-critical)" }}>■</span> {r.error}
@@ -260,7 +326,10 @@ export function RunDetailPage({ id }: { id: number }) {
       </div>
 
       <dl className="card grid grid-cols-2 gap-3 p-4 text-sm md:grid-cols-4">
-        <Fact label="Model">{r.model} · max {r.max_turns} turns</Fact>
+        <Fact label="Model">
+          {r.model}
+          {r.effort ? ` · ${r.effort} effort` : ""} · max {r.max_turns} turns
+        </Fact>
         <Fact label="Branch">
           <code className="text-xs">{r.branch ?? "—"}</code>
           {r.base_branch && <span className="text-xs muted"> from {r.base_branch}</span>}
@@ -272,6 +341,9 @@ export function RunDetailPage({ id }: { id: number }) {
         <Fact label="Spend (5-hour window)">
           {spent != null ? `${spent.toFixed(1)} pp` : "—"}
           {budget != null && <span className="text-xs muted"> of {budget.toFixed(0)} pp room</span>}
+          {r.cap_five_hour_pct != null && (
+            <span className="block text-xs muted">hard stop at {r.cap_five_hour_pct.toFixed(0)}%</span>
+          )}
         </Fact>
         <Fact label="Ended because">{r.exit_reason?.replaceAll("_", " ") ?? "—"}</Fact>
         <Fact label="Started">{r.started_at ? since(r.started_at) : "—"}</Fact>
@@ -283,6 +355,8 @@ export function RunDetailPage({ id }: { id: number }) {
           this run started; the agent worked from the last commit.
         </p>
       )}
+
+      {r.can_continue && <ContinuePanel run={r} />}
 
       <Report run={r} />
 

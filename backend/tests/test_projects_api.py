@@ -124,6 +124,24 @@ def test_settings_patch(client: TestClient) -> None:
     assert (d["status"], d["model"]) == ("paused", "haiku")
 
 
+def test_runner_overrides_set_and_reset(client: TestClient) -> None:
+    _create(client)
+    url = "/api/projects/my-cool-idea"
+    h = client.get(url).json()["docs"]["project"]["hash"]
+    body = {"base_hash": h, "model": "opus", "effort": "high", "max_five_hour_pct": 90, "max_turns": 80}
+    assert client.patch(f"{url}/settings", json=body).status_code == 200
+    d = client.get(url).json()
+    assert (d["model"], d["effort"], d["max_five_hour_pct"], d["max_turns"]) == ("opus", "high", 90, 80)
+    assert "effort: high" in d["docs"]["project"]["content"]
+    # Caps above 95% are refused for a project; only a user-approved continuation may go higher.
+    h = d["docs"]["project"]["hash"]
+    assert client.patch(f"{url}/settings", json={"base_hash": h, "max_five_hour_pct": 99}).status_code == 422
+    reset = {"base_hash": h, "reset": ["effort", "max_five_hour_pct"]}
+    assert client.patch(f"{url}/settings", json=reset).status_code == 200
+    d = client.get(url).json()
+    assert (d["effort"], d["max_five_hour_pct"], d["max_turns"]) == (None, None, 80)
+
+
 def test_unknown_project_404(client: TestClient) -> None:
     assert client.get("/api/projects/nope").status_code == 404
 

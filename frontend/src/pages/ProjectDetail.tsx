@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useState } from "react";
-import { api, ApiError, type ProjectDetail } from "../api/client";
+import { api, ApiError, EFFORTS, type Effort, type ProjectDetail } from "../api/client";
 import { Backlog } from "../components/Backlog";
 import { DocEditor } from "../components/DocEditor";
 import { Markdown } from "../components/Markdown";
@@ -215,7 +215,24 @@ function SettingsForm({ p }: { p: ProjectDetail }) {
     model: p.model,
     share: Math.round(p.max_share_of_surplus * 100),
     test_command: p.test_command ?? "",
+    effort: p.effort ?? "",
+    max_turns: p.max_turns != null ? String(p.max_turns) : "",
+    timeout: p.run_timeout_minutes != null ? String(p.run_timeout_minutes) : "",
+    cap5: p.max_five_hour_pct != null ? String(p.max_five_hour_pct) : "",
+    capw: p.max_weekly_pct != null ? String(p.max_weekly_pct) : "",
   });
+  const num = (v: string) => (v.trim() === "" ? undefined : Number(v));
+  const reset = (
+    [
+      ["effort", form.effort],
+      ["max_turns", form.max_turns],
+      ["run_timeout_minutes", form.timeout],
+      ["max_five_hour_pct", form.cap5],
+      ["max_weekly_pct", form.capw],
+    ] as const
+  )
+    .filter(([, v]) => v.trim() === "")
+    .map(([k]) => k);
   const save = useMutation({
     mutationFn: () =>
       api.updateSettings(p.id, {
@@ -227,6 +244,12 @@ function SettingsForm({ p }: { p: ProjectDetail }) {
         max_share_of_surplus: form.share / 100,
         test_command: form.test_command.trim() || null,
         clear_test_command: !form.test_command.trim(),
+        effort: (form.effort || undefined) as Effort | undefined,
+        max_turns: num(form.max_turns),
+        run_timeout_minutes: num(form.timeout),
+        max_five_hour_pct: num(form.cap5),
+        max_weekly_pct: num(form.capw),
+        reset,
       }),
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: ["project", p.id] });
@@ -293,6 +316,44 @@ function SettingsForm({ p }: { p: ProjectDetail }) {
           placeholder="uv run pytest -q"
         />
       </label>
+      <fieldset className="space-y-2 rounded-md border p-3" style={{ borderColor: "var(--border)" }}>
+        <legend className="px-1 text-xs muted">Agent runs (empty = Surplus default)</legend>
+        <div className="flex flex-wrap gap-3">
+          <label className="flex flex-col text-xs muted">
+            Effort
+            <select className="field mt-1" value={form.effort} onChange={(e) => set("effort", e.target.value)}>
+              <option value="">default</option>
+              {EFFORTS.map((x) => (
+                <option key={x}>{x}</option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col text-xs muted">
+            Max turns
+            <input className="field mt-1 w-20" type="number" min={1} max={200} placeholder="40"
+              value={form.max_turns} onChange={(e) => set("max_turns", e.target.value)} />
+          </label>
+          <label className="flex flex-col text-xs muted">
+            Time limit (min)
+            <input className="field mt-1 w-20" type="number" min={5} max={240} placeholder="45"
+              value={form.timeout} onChange={(e) => set("timeout", e.target.value)} />
+          </label>
+          <label className="flex flex-col text-xs muted">
+            5-hour hard stop (%)
+            <input className="field mt-1 w-20" type="number" min={10} max={95} placeholder="85"
+              value={form.cap5} onChange={(e) => set("cap5", e.target.value)} />
+          </label>
+          <label className="flex flex-col text-xs muted">
+            Weekly hard stop (%)
+            <input className="field mt-1 w-20" type="number" min={10} max={95} placeholder="90"
+              value={form.capw} onChange={(e) => set("capw", e.target.value)} />
+          </label>
+        </div>
+        <p className="text-xs muted">
+          A run that reaches its hard stop, turns or time limit still commits, tests and reports, then asks you
+          whether it may continue.
+        </p>
+      </fieldset>
       <div className="flex items-center gap-2">
         <button className="btn" type="submit" disabled={save.isPending}>
           {save.isPending ? "Saving…" : "Save settings"}
