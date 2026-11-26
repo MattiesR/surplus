@@ -27,7 +27,11 @@ Option 2, the safest of the three: it adds nothing to install and keeps one UI.
    can only write under `~/snap/<name>/`, so their profile lives there.
 4. If the server is down and the service is installed, `surplus app` starts the service and waits. Errors go
    to a desktop notification when there is no terminal.
-5. Without a Chromium-family browser it falls back to a tab in the default browser (Firefox has no app mode).
+5. **Window placement.** The browser remembers the size you last gave the window. When that placement is
+   missing or does not lie fully on one screen, `surplus app` passes a size that fits the primary screen
+   (at most 1440×1000, centred), read via `xrandr --listmonitors`. A first launch on a two-screen setup had
+   opened taller than the laptop screen, with its title bar out of reach.
+6. Without a Chromium-family browser it falls back to a tab in the default browser (Firefox has no app mode).
    `SURPLUS_APP_BROWSER` picks a specific browser.
 
 ## Consequences

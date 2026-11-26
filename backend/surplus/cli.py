@@ -268,7 +268,8 @@ def open_app(
         typer.echo("No Chromium-family browser found: opening a tab in your default browser instead.")
         desktop.open_in_default_browser(url)
         return
-    desktop.launch(desktop.browser_command(browser, url, desktop.profile_dir(browser)))
+    profile = desktop.profile_dir(browser)
+    desktop.launch(desktop.browser_command(browser, url, profile, desktop.window_bounds(profile)))
 
 
 @app.command()

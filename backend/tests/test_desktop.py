@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import stat
 from collections.abc import Iterator
@@ -122,6 +123,54 @@ def test_profile_dir_and_command(tmp_path: Path) -> None:
     assert f"--user-data-dir={tmp_path / 'p'}" in cmd and "--class=Surplus" in cmd
 
 
+# --- window placement ------------------------------------------------------------------------------------
+
+XRANDR = """Monitors: 2
+ 0: +*HDMI-1-0 2560/597x1440/336+0+0  HDMI-1-0
+ 1: +eDP-1 1920/344x1080/193+2560+200  eDP-1
+"""
+
+
+def test_parse_monitors() -> None:
+    main, laptop = desktop.parse_monitors(XRANDR)
+    assert main == desktop.Monitor("HDMI-1-0", desktop.Rect(0, 0, 2560, 1440), primary=True)
+    assert laptop.rect == desktop.Rect(2560, 200, 1920, 1080) and not laptop.primary
+    assert desktop.parse_monitors("") == []
+
+
+def test_default_bounds_fit_the_primary_screen() -> None:
+    screens = desktop.parse_monitors(XRANDR)
+    b = desktop.default_bounds(screens)
+    assert b == desktop.Rect(560, 220, 1440, 1000) and screens[0].rect.contains(b)
+    small = [desktop.Monitor("x", desktop.Rect(0, 0, 1366, 768), True)]
+    sb = desktop.default_bounds(small)
+    assert sb is not None and small[0].rect.contains(sb) and sb.h <= 768 * 0.8
+    assert desktop.default_bounds([]) is None
+
+
+def _prefs(profile: Path, left: int, top: int, right: int, bottom: int) -> None:
+    (profile / "Default").mkdir(parents=True, exist_ok=True)
+    place = {"left": left, "top": top, "right": right, "bottom": bottom, "maximized": False}
+    data = {"browser": {"app_window_placement": {"127": {"0": {"1_/auth": place}}}}}
+    (profile / "Default/Preferences").write_text(json.dumps(data))
+
+
+def test_saved_placement_is_kept_only_when_it_fits(tmp_path: Path) -> None:
+    screens = desktop.parse_monitors(XRANDR)
+    assert not desktop.saved_placement_fits(tmp_path, screens)  # nothing saved yet
+    _prefs(tmp_path, 2560, 37, 3737, 1440)  # taller than the laptop screen, top above it (the real bug)
+    assert not desktop.saved_placement_fits(tmp_path, screens)
+    _prefs(tmp_path, 100, 100, 1500, 1100)
+    assert desktop.saved_placement_fits(tmp_path, screens)
+
+
+def test_bounds_go_on_the_command_line() -> None:
+    b = desktop.Browser(Path("/usr/bin/chromium"), snap=False)
+    cmd = desktop.browser_command(b, "u", Path("/p"), desktop.Rect(560, 220, 1440, 1000))
+    assert "--window-position=560,220" in cmd and "--window-size=1440,1000" in cmd
+    assert not any(c.startswith("--window-") for c in desktop.browser_command(b, "u", Path("/p")))
+
+
 # --- CLI ---------------------------------------------------------------------------------------------------
 
 
@@ -132,6 +181,7 @@ def cli_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg"))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdgc"))
     monkeypatch.setattr(desktop, "notify", lambda message: None)
+    monkeypatch.setattr(desktop, "monitors", list)
     return tmp_path
 
 

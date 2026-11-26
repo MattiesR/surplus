@@ -11,7 +11,9 @@ Without a Chromium-family browser it falls back to a tab in your default browser
 from __future__ import annotations
 
 import contextlib
+import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -129,9 +131,90 @@ def profile_dir(browser: Browser, env: Mapping[str, str] | None = None) -> Path:
     return data_home(env) / "surplus" / "app-profile"
 
 
-def browser_command(browser: Browser, url: str, profile: Path) -> list[str]:
-    """Pure. `url` must carry a one-time code, never the API token (the command line is public)."""
-    return [
+@dataclass(frozen=True)
+class Rect:
+    x: int
+    y: int
+    w: int
+    h: int
+
+    def contains(self, other: Rect) -> bool:
+        return (
+            other.x >= self.x
+            and other.y >= self.y
+            and other.x + other.w <= self.x + self.w
+            and other.y + other.h <= self.y + self.h
+        )
+
+
+@dataclass(frozen=True)
+class Monitor:
+    name: str
+    rect: Rect
+    primary: bool
+
+
+_MONITOR = re.compile(r"^\s*\d+:\s+\+?(\*?)(\S+)\s+(\d+)/\d+x(\d+)/\d+\+(-?\d+)\+(-?\d+)")
+
+
+def parse_monitors(xrandr_output: str) -> list[Monitor]:
+    """Pure: `xrandr --listmonitors` → monitors (e.g. ` 0: +*HDMI-1 2560/597x1440/336+0+0  HDMI-1`)."""
+    out = []
+    for line in xrandr_output.splitlines():
+        m = _MONITOR.match(line)
+        if m:
+            star, name, w, h, x, y = m.groups()
+            out.append(Monitor(name, Rect(int(x), int(y), int(w), int(h)), primary=star == "*"))
+    return out
+
+
+def monitors() -> list[Monitor]:
+    """The screens, via xrandr (X11 and XWayland). Empty when unknown: then the browser decides."""
+    if not shutil.which("xrandr"):
+        return []
+    try:
+        res = subprocess.run(
+            ["xrandr", "--listmonitors"], capture_output=True, text=True, timeout=5, check=False
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    return parse_monitors(res.stdout) if res.returncode == 0 else []
+
+
+def default_bounds(screens: list[Monitor], max_w: int = 1440, max_h: int = 1000) -> Rect | None:
+    """Pure: a window well inside the primary screen, centred (room for panels and the title bar)."""
+    if not screens:
+        return None
+    screen = next((m for m in screens if m.primary), screens[0]).rect
+    w = min(max_w, int(screen.w * 0.85))
+    h = min(max_h, int(screen.h * 0.8))
+    return Rect(screen.x + (screen.w - w) // 2, screen.y + (screen.h - h) // 2, w, h)
+
+
+def _placements(node: object) -> list[Rect]:
+    if not isinstance(node, dict):
+        return []
+    if all(isinstance(node.get(k), int) for k in ("left", "top", "right", "bottom")):
+        return [Rect(node["left"], node["top"], node["right"] - node["left"], node["bottom"] - node["top"])]
+    return [r for v in node.values() for r in _placements(v)]
+
+
+def saved_placement_fits(profile: Path, screens: list[Monitor]) -> bool:
+    """Did the browser remember a window that lies fully on one screen? (It remembers what you last chose.)"""
+    try:
+        prefs = json.loads((profile / "Default" / "Preferences").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    saved = _placements(prefs.get("browser", {}).get("app_window_placement", {}))
+    return bool(saved) and all(any(m.rect.contains(r) for m in screens) for r in saved)
+
+
+def browser_command(browser: Browser, url: str, profile: Path, bounds: Rect | None = None) -> list[str]:
+    """Pure. `url` must carry a one-time code, never the API token (the command line is public).
+
+    `bounds` overrides the remembered window placement; pass it only when that placement does not fit.
+    """
+    cmd = [
         str(browser.path),
         f"--app={url}",
         f"--user-data-dir={profile}",
@@ -139,6 +222,17 @@ def browser_command(browser: Browser, url: str, profile: Path) -> list[str]:
         "--no-first-run",
         "--no-default-browser-check",
     ]
+    if bounds is not None:
+        cmd += [f"--window-position={bounds.x},{bounds.y}", f"--window-size={bounds.w},{bounds.h}"]
+    return cmd
+
+
+def window_bounds(profile: Path) -> Rect | None:
+    """None keeps the size you last gave the window; otherwise a size that fits the primary screen."""
+    screens = monitors()
+    if not screens or saved_placement_fits(profile, screens):
+        return None
+    return default_bounds(screens)
 
 
 def launch(cmd: list[str]) -> None:
