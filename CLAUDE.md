@@ -28,7 +28,8 @@ fewer permissions, more user control) and record an ADR in `docs/decisions/NNNN-
 - `make runner-image` · `make redteam` (real Podman, no quota) · `make redteam-agent` (real Haiku agent: spends quota;
   only run it deliberately). Tests marked `podman`/`quota` are excluded from `make check`.
 - `make build` regenerates `openapi.json` + `frontend/src/api/schema.d.ts` and builds the SPA into `backend/surplus/static`.
-- `uv run surplus serve|ingest|probe|status|doctor|statusline|simulate|pause|resume|hours|auto|install|uninstall|link …`
+- `uv run surplus serve|ingest|probe|status|doctor|statusline|simulate|pause|resume|hours|auto|install|uninstall|link|app …`
+  (`surplus app` = the dashboard in its own window, ADR 0020).
 - `uv` lives in `~/.local/bin` (the Makefile adds it to PATH).
 
 ## Engineering standards (plan §13)

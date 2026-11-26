@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <title>Surplus</title>
+  <rect x="4" y="4" width="120" height="120" rx="28" fill="#14181f"/>
+  <path d="M28 84 A36 36 0 0 1 100 84" fill="none" stroke="#3a4250" stroke-width="12" stroke-linecap="round"/>
+  <path d="M28 84 A36 36 0 0 1 82.8 53.3" fill="none" stroke="#2fb67c" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="64" cy="84" r="7" fill="#e8ecf2"/>
+  <path d="M64 84 L79.7 58.4" stroke="#e8ecf2" stroke-width="5" stroke-linecap="round"/>
+</svg>

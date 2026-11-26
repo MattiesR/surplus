@@ -22,7 +22,7 @@ from surplus.api import inbox as inbox_api
 from surplus.api import plan as plan_api
 from surplus.api import projects as projects_api
 from surplus.api import runs as runs_api
-from surplus.api.auth import _eq, load_or_create_token, make_middleware, set_auth_cookies
+from surplus.api.auth import LoginCodes, _eq, load_or_create_token, make_middleware, set_auth_cookies
 from surplus.clock import Clock, SystemClock
 from surplus.collector.reset_watcher import project_reset
 from surplus.collector.service import Collector, ProbeFn
@@ -40,6 +40,7 @@ from surplus.runner.service import RunService
 from surplus.secrets import CLAUDE_TOKEN, read_secret
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+ICON = Path(__file__).resolve().parent.parent / "icon.svg"
 log = structlog.get_logger(__name__)
 
 
@@ -47,6 +48,11 @@ def resolve_claude_bin(name: str) -> Path | None:
     """The real CLI binary (symlinks followed), for the read-only mount into run containers."""
     found = shutil.which(name)
     return Path(found).resolve() if found else None
+
+
+class LoginCodeOut(BaseModel):
+    code: str
+    expires_in_s: int
 
 
 class BucketOut(BaseModel):
@@ -179,13 +185,29 @@ def create_app(
     allowed_hosts = frozenset(f"{h}:{settings.port}" for h in ("127.0.0.1", "localhost"))
     app.middleware("http")(make_middleware(token, allowed_hosts))
 
+    codes = LoginCodes(clock)
+
     @app.get("/auth", include_in_schema=False)
-    def auth(token_param: str = Query(alias="token")) -> Response:
-        if not _eq(token_param, token):
-            raise HTTPException(401, "bad token")
+    def auth(
+        token_param: str | None = Query(default=None, alias="token"),
+        code: str | None = Query(default=None, max_length=128),
+    ) -> Response:
+        by_token = token_param is not None and _eq(token_param, token)
+        ok = by_token or (code is not None and codes.redeem(code))
+        if not ok:
+            raise HTTPException(401, "bad or expired sign-in link")
         resp = RedirectResponse("/", status_code=303)
         set_auth_cookies(resp, token)
         return resp
+
+    @app.post("/api/auth/code")
+    def login_code() -> LoginCodeOut:
+        """A one-time sign-in code for `/auth?code=` (60 s, single use); `surplus app` signs in with it."""
+        return LoginCodeOut(code=codes.issue(), expires_in_s=int(codes.ttl.total_seconds()))
+
+    @app.get("/favicon.svg", include_in_schema=False)
+    def favicon() -> Response:
+        return FileResponse(ICON, media_type="image/svg+xml")
 
     @app.get("/api/health")
     def health() -> dict[str, str]:

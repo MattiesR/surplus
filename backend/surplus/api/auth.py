@@ -11,10 +11,13 @@ from __future__ import annotations
 import hmac
 import secrets
 from collections.abc import Awaitable, Callable
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
+
+from surplus.clock import Clock
 
 SESSION_COOKIE = "surplus_session"
 CSRF_COOKIE = "surplus_csrf"
@@ -33,6 +36,35 @@ def load_or_create_token(path: Path) -> str:
     path.write_text(token + "\n")
     path.chmod(0o600)
     return token
+
+
+class LoginCodes:
+    """One-time sign-in codes for the desktop window (ADR 0020).
+
+    `surplus app` opens a browser with a URL on its command line, which other local users can read in `ps`.
+    So that URL carries a code, not the API token: it is good for one sign-in within `ttl`, then worthless.
+    Codes live in memory only; a restart drops them.
+    """
+
+    def __init__(self, clock: Clock, ttl: timedelta = timedelta(seconds=60), limit: int = 20) -> None:
+        self.clock, self.ttl, self.limit = clock, ttl, limit
+        self._codes: dict[str, datetime] = {}
+
+    def issue(self) -> str:
+        now = self.clock.now()
+        self._codes = {c: t for c, t in self._codes.items() if t > now}
+        while len(self._codes) >= self.limit:
+            self._codes.pop(next(iter(self._codes)))
+        code = secrets.token_urlsafe(24)
+        self._codes[code] = now + self.ttl
+        return code
+
+    def redeem(self, code: str) -> bool:
+        match = next((c for c in self._codes if _eq(code, c)), None)
+        if match is None:
+            return False
+        expires = self._codes.pop(match)
+        return expires > self.clock.now()
 
 
 def csrf_for(token: str) -> str:

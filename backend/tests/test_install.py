@@ -11,6 +11,12 @@ from typer.testing import CliRunner
 from surplus import install as inst
 
 
+@pytest.fixture(autouse=True)
+def _own_data_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`surplus install` also writes the app-menu launcher: keep it out of the real ~/.local/share."""
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+
+
 def test_unit_text_and_no_secrets() -> None:
     env = {
         "SURPLUS_TZ": "Europe/Brussels",
@@ -65,9 +71,12 @@ def test_install_and_uninstall_with_a_fake_systemctl(tmp_path: Path, monkeypatch
     assert unit.exists() and "serve --host 127.0.0.1" in unit.read_text()
     assert ("daemon-reload",) in calls and ("enable", "--now", "surplus.service") in calls
     assert "enabled, running" in out.output
+    entry = tmp_path / "data/applications/surplus.desktop"
+    assert entry.exists() and "app" in entry.read_text() and "app menu" in out.output
 
     out = run.invoke(app, ["uninstall"])
     assert out.exit_code == 0 and not unit.exists() and ("disable", "--now", "surplus.service") in calls
+    assert not entry.exists()
     assert "not installed" in run.invoke(app, ["uninstall"]).output
 
 

@@ -23,6 +23,10 @@
   unit, `--dry-run` to preview it, a refusal when the port is taken, and a `service` check in
   `surplus doctor`. Under the service, `serve` keeps the sign-in token out of the journal; `surplus link`
   prints it on demand.
+- `surplus app` (ADR 0020): the dashboard in its own window (Chromium app mode, own profile) with an
+  app-menu launcher and icon (`surplus app --install`; `surplus install` adds it too). It signs in with a
+  one-time 60-second code from `POST /api/auth/code`, so the API token never appears on a command line.
+  It starts the service when it is down. The dashboard has a favicon.
 
 **Phase 5 status:** all features are built. The DoD also needs a week of real unattended running: turn on
 automatic runs (`surplus auto on`) and install the service.

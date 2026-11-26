@@ -1764,6 +1764,25 @@
         }
       }
     },
+    "/api/auth/code": {
+      "post": {
+        "summary": "Login Code",
+        "description": "A one-time sign-in code for `/auth?code=` (60 s, single use); `surplus app` signs in with it.",
+        "operationId": "login_code_api_auth_code_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginCodeOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "summary": "Health",
@@ -2513,6 +2532,24 @@
           "is_error"
         ],
         "title": "LogEntryOut"
+      },
+      "LoginCodeOut": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "expires_in_s": {
+            "type": "integer",
+            "title": "Expires In S"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "expires_in_s"
+        ],
+        "title": "LoginCodeOut"
       },
       "ManualReadingIn": {
         "properties": {

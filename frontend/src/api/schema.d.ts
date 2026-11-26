@@ -487,6 +487,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Login Code
+         * @description A one-time sign-in code for `/auth?code=` (60 s, single use); `surplus app` signs in with it.
+         */
+        post: operations["login_code_api_auth_code_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -816,6 +836,13 @@ export interface components {
             text: string;
             /** Is Error */
             is_error: boolean;
+        };
+        /** LoginCodeOut */
+        LoginCodeOut: {
+            /** Code */
+            code: string;
+            /** Expires In S */
+            expires_in_s: number;
         };
         /** ManualReadingIn */
         ManualReadingIn: {
@@ -2919,6 +2946,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    login_code_api_auth_code_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginCodeOut"];
                 };
             };
         };

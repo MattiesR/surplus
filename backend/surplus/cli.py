@@ -210,6 +210,67 @@ def link(port: int = 8765) -> None:
     typer.echo(f"http://127.0.0.1:{port}/auth?token={load_or_create_token(paths.api_token_file)}")
 
 
+def _app_fail(message: str) -> None:
+    from surplus import desktop
+
+    typer.secho(message, fg="red", err=True)
+    if not sys.stdin.isatty():  # started from the app menu: nobody reads stderr
+        desktop.notify(message)
+    raise typer.Exit(1)
+
+
+@app.command("app")
+def open_app(
+    port: int = 8765,
+    add_launcher: Annotated[
+        bool, typer.Option("--install", help="Add Surplus to your app menu, then exit")
+    ] = False,
+    remove_launcher: Annotated[
+        bool, typer.Option("--uninstall", help="Remove Surplus from your app menu, then exit")
+    ] = False,
+    wait: Annotated[float, typer.Option(help="Seconds to wait for the service to come up")] = 20.0,
+) -> None:
+    """Open the dashboard in its own window (the background service keeps recording either way)."""
+    import time
+
+    from surplus import desktop
+    from surplus import install as inst
+    from surplus.api.auth import load_or_create_token
+
+    if add_launcher:
+        entry = desktop.install_launcher(inst.surplus_executable(), port)
+        typer.echo(f"Added Surplus to your app menu ({entry}).")
+        return
+    if remove_launcher:
+        removed = desktop.remove_launcher()
+        typer.echo("Removed the app-menu entry." if removed else "There was no app-menu entry.")
+        return
+
+    base = f"http://127.0.0.1:{port}"
+    if not desktop.server_up(base):
+        if not inst.service_state().installed:
+            _app_fail("Surplus is not running: `surplus install` runs it at login, or start `surplus serve`.")
+        inst.systemctl("start", inst.UNIT_NAME)
+        deadline = time.monotonic() + wait
+        while not desktop.server_up(base):
+            if time.monotonic() > deadline:
+                _app_fail("The Surplus service did not start. See `journalctl --user -u surplus`.")
+            time.sleep(0.5)
+
+    paths = Paths.from_env()
+    try:
+        code = desktop.login_code(base, load_or_create_token(paths.api_token_file))
+    except desktop.SignInError as exc:
+        _app_fail(f"Cannot open Surplus: {exc}")
+    url = f"{base}/auth?code={code}"
+    browser = desktop.find_browser()
+    if browser is None:
+        typer.echo("No Chromium-family browser found: opening a tab in your default browser instead.")
+        desktop.open_in_default_browser(url)
+        return
+    desktop.launch(desktop.browser_command(browser, url, desktop.profile_dir(browser)))
+
+
 @app.command()
 def install(
     start: Annotated[bool, typer.Option(help="Enable and start the service now")] = True,
@@ -248,6 +309,10 @@ def install(
         if already.active:
             inst.systemctl("restart", inst.UNIT_NAME)
     typer.echo(f"Wrote {target}.")
+    from surplus import desktop
+
+    entry = desktop.install_launcher(inst.surplus_executable(), port)
+    typer.echo(f"Added Surplus to your app menu ({entry.name}); `surplus app` opens the window.")
     typer.echo(f"Service: {inst.service_state().describe()}")
     typer.echo("Logs: journalctl --user -u surplus -f · sign-in link: surplus link")
 
@@ -255,8 +320,11 @@ def install(
 @app.command()
 def uninstall() -> None:
     """Stop and remove the systemd user service (your data and settings stay)."""
+    from surplus import desktop
     from surplus import install as inst
 
+    if desktop.remove_launcher():
+        typer.echo("Removed the app-menu entry.")
     target = inst.unit_dir() / inst.UNIT_NAME
     if not target.exists():
         typer.echo("The service is not installed.")

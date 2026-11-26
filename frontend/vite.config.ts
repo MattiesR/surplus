@@ -10,7 +10,9 @@ export default defineConfig({
   server: {
     port: 5173,
     // changeOrigin rewrites Host to 127.0.0.1:8765, which the API's DNS-rebinding check accepts.
-    proxy: { "/api": { target: backend, changeOrigin: true }, "/auth": { target: backend, changeOrigin: true } },
+    proxy: { "/api": { target: backend, changeOrigin: true }, "/auth": { target: backend, changeOrigin: true },
+      "/favicon.svg": { target: backend, changeOrigin: true },
+    },
   },
   test: { environment: "jsdom", include: ["src/**/*.test.ts?(x)"] },
 });
