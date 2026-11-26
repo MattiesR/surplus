@@ -1510,6 +1510,27 @@
         }
       }
     },
+    "/api/plan": {
+      "get": {
+        "tags": [
+          "plan"
+        ],
+        "summary": "Get Plan",
+        "operationId": "get_plan_api_plan_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "summary": "Health",
@@ -2066,6 +2087,35 @@
         ],
         "title": "DocOut"
       },
+      "ForecastOut": {
+        "properties": {
+          "start": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start"
+          },
+          "p50": {
+            "type": "number",
+            "title": "P50"
+          },
+          "p90": {
+            "type": "number",
+            "title": "P90"
+          },
+          "basis": {
+            "type": "string",
+            "title": "Basis"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start",
+          "p50",
+          "p90",
+          "basis"
+        ],
+        "title": "ForecastOut"
+      },
       "GoalIn": {
         "properties": {
           "title": {
@@ -2222,6 +2272,159 @@
         },
         "type": "object",
         "title": "PauseIn"
+      },
+      "PlanOut": {
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "unavailable": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unavailable"
+          },
+          "generated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At"
+          },
+          "weekly_reset": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weekly Reset"
+          },
+          "allowed_now": {
+            "type": "number",
+            "title": "Allowed Now",
+            "default": 0.0
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "confidence_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Confidence Reasons",
+            "default": []
+          },
+          "weekly_per_five": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weekly Per Five"
+          },
+          "conversion_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversion Source"
+          },
+          "conversion_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversion Reason"
+          },
+          "trend": {
+            "type": "number",
+            "title": "Trend",
+            "default": 1.0
+          },
+          "user_active": {
+            "type": "boolean",
+            "title": "User Active",
+            "default": false
+          },
+          "drift_minutes": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drift Minutes"
+          },
+          "weekly": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WeeklyOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "windows": {
+            "items": {
+              "$ref": "#/components/schemas/WindowOut"
+            },
+            "type": "array",
+            "title": "Windows",
+            "default": []
+          },
+          "forecast": {
+            "items": {
+              "$ref": "#/components/schemas/ForecastOut"
+            },
+            "type": "array",
+            "title": "Forecast",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "available",
+          "unavailable"
+        ],
+        "title": "PlanOut"
       },
       "PreflightOut": {
         "properties": {
@@ -4073,6 +4276,92 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "WeeklyOut": {
+        "properties": {
+          "free": {
+            "type": "number",
+            "title": "Free"
+          },
+          "manual_future": {
+            "type": "number",
+            "title": "Manual Future"
+          },
+          "reserve": {
+            "type": "number",
+            "title": "Reserve"
+          },
+          "surplus": {
+            "type": "number",
+            "title": "Surplus"
+          },
+          "planned": {
+            "type": "number",
+            "title": "Planned"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reasons"
+          }
+        },
+        "type": "object",
+        "required": [
+          "free",
+          "manual_future",
+          "reserve",
+          "surplus",
+          "planned",
+          "reasons"
+        ],
+        "title": "WeeklyOut"
+      },
+      "WindowOut": {
+        "properties": {
+          "start": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start"
+          },
+          "end": {
+            "type": "string",
+            "format": "date-time",
+            "title": "End"
+          },
+          "current": {
+            "type": "boolean",
+            "title": "Current"
+          },
+          "manual_p90": {
+            "type": "number",
+            "title": "Manual P90"
+          },
+          "capacity": {
+            "type": "number",
+            "title": "Capacity"
+          },
+          "allocation": {
+            "type": "number",
+            "title": "Allocation"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start",
+          "end",
+          "current",
+          "manual_p90",
+          "capacity",
+          "allocation",
+          "reason"
+        ],
+        "title": "WindowOut"
       },
       "WriteDocIn": {
         "properties": {

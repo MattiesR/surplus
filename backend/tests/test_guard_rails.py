@@ -51,7 +51,7 @@ def test_kill_switch_stops_automatic_runs_only() -> None:
 @pytest.mark.parametrize(
     ("allowed", "fresh", "active", "why"),
     [
-        (None, True, [], "no fresh reset"),
+        (None, True, [], "no plan"),
         (50.0, False, [], "no fresh reset"),
         (50.0, True, [ActiveRun(1, "manual")], "in progress"),
         (2.0, True, [], "needs 5"),

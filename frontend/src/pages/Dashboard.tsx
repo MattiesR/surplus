@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { ControlCard } from "../components/Control";
 import { Gauge } from "../components/Gauge";
+import { PlanTimeline } from "../components/PlanTimeline";
 import { CalibrateCard, SourcesCard, SplitCard } from "../components/Panels";
 import { UsageChart } from "../components/UsageChart";
 
@@ -23,6 +24,8 @@ export function Dashboard() {
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ["status"] });
     void qc.invalidateQueries({ queryKey: ["week"] });
+    void qc.invalidateQueries({ queryKey: ["plan"] });
+    void qc.invalidateQueries({ queryKey: ["control"] });
   };
   const probe = useMutation({ mutationFn: api.probe, onSettled: refresh });
   const manual = useMutation({
@@ -66,6 +69,8 @@ export function Dashboard() {
       </div>
 
       <UsageChart points={week.data ?? []} weekStart={weekStart} weekEnd={weekEnd} />
+
+      <PlanTimeline />
 
       <div className="grid gap-4 md:grid-cols-3">
         <div className="md:col-span-2">

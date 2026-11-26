@@ -15,7 +15,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from surplus.clock import Clock
+from surplus.clock import Clock, FakeClock
 from surplus.collector import reset_watcher
 from surplus.collector.sources.probe import ProbeError, run_probe
 from surplus.collector.sources.statusline import ingest_spool
@@ -250,6 +250,20 @@ class Collector:
             history_days=round(model.history_days, 2),
             cold_start=model.cold_start,
         )
+        return model
+
+    def week_start_model(self, bucket: str, week_start: datetime) -> SeasonalBaseline:
+        """The baseline as it was at the start of this week: the reference of the weekly trend (ADR 0012).
+        A model refitted during the week already contains the week, so it would always look "as forecast"."""
+        key = f"{bucket}@{week_start.isoformat()}"
+        cached = self._baselines.get(key)
+        if cached is not None:
+            return cached
+        obs = [o for o in self.user_observations(bucket) if o.slot_start < week_start]
+        model = fit_baseline(bucket, obs, FakeClock(week_start), self.settings.tz())
+        for old in [k for k in self._baselines if k.startswith(f"{bucket}@")]:
+            del self._baselines[old]
+        self._baselines[key] = model
         return model
 
     def activity(self, recent_jump: timedelta = RECENT_JUMP) -> Activity:

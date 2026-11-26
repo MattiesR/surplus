@@ -29,7 +29,8 @@ describe("controlHeadline", () => {
   it("shows the kill switch when the user is active", () => {
     expect(controlHeadline({ ...base, user_active: true }, now).tone).toBe("warning");
   });
-  it("is calm otherwise", () => {
-    expect(controlHeadline(base, now).tone).toBe("ok");
+  it("is calm otherwise, and only promises agent work when a start is allowed", () => {
+    expect(controlHeadline(base, now)).toEqual({ tone: "ok", text: "Not paused, and you are idle" });
+    expect(controlHeadline({ ...base, auto_start: true }, now).text).toContain("may use spare capacity");
   });
 });

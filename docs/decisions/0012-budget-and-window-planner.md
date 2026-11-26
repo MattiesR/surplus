@@ -10,7 +10,9 @@ end-of-week sweep, but leaves the exact rules open. Implementation: `optimizer/b
 ## Decision
 1. **Units.** Every window quantity is in pp of the 5-hour window (pp5), weekly ones in pp of the weekly limit
    (ppw). `weekly_per_five` converts: 1 pp5 of agent work costs that many ppw. It is the ratio of the two
-   buckets' cost-model coefficients when both fits are trustworthy, else a **prior of 0.2** (a full window =
+   buckets' cost-model coefficients when both fits are trustworthy (fitted, not prior, coefficients of model
+   families in both fits; the largest ratio, clamped to 0.01-1, is used because it leaves the least for
+   agents), else a **prior of 0.2** (a full window =
    20% of the week, true of small plans; larger plans make it smaller, so the prior under-spends).
 2. **Window capacity** = `min(100 - used - P90 user - reserve, hard stop - used - P90 user)`, floored at 0.
    The window reserve is 25 pp5, and 100 (i.e. nothing for agents) in the current window while the user is

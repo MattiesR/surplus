@@ -56,8 +56,10 @@ def guard(
         detail = activity.reason or "you are active"
         stops = tuple(Stop(r.id, ExitReason.USER_ACTIVE, detail) for r in active if r.trigger == "auto")
         return GuardDecision(stops, False, f"kill switch: {detail}")
-    if not resets_fresh or allowed_now is None:
+    if not resets_fresh:
         return GuardDecision((), False, "no fresh reset times from Claude: waiting for a probe")
+    if allowed_now is None:
+        return GuardDecision((), False, "no plan to start from: automatic runs arrive in Phase 5")
     if len(active) >= max_concurrent:
         return GuardDecision((), False, "a run is in progress")
     if allowed_now < min_run_pct:

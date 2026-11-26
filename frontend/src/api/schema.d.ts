@@ -384,6 +384,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Plan */
+        get: operations["get_plan_api_plan_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -637,6 +654,20 @@ export interface components {
             /** Hash */
             hash: string;
         };
+        /** ForecastOut */
+        ForecastOut: {
+            /**
+             * Start
+             * Format: date-time
+             */
+            start: string;
+            /** P50 */
+            p50: number;
+            /** P90 */
+            p90: number;
+            /** Basis */
+            basis: string;
+        };
         /** GoalIn */
         GoalIn: {
             /** Title */
@@ -698,6 +729,58 @@ export interface components {
              * @default
              */
             reason: string;
+        };
+        /** PlanOut */
+        PlanOut: {
+            /** Available */
+            available: boolean;
+            /** Unavailable */
+            unavailable: string | null;
+            /** Generated At */
+            generated_at?: string | null;
+            /** Weekly Reset */
+            weekly_reset?: string | null;
+            /**
+             * Allowed Now
+             * @default 0
+             */
+            allowed_now: number;
+            /** Confidence */
+            confidence?: number | null;
+            /**
+             * Confidence Reasons
+             * @default []
+             */
+            confidence_reasons: string[];
+            /** Weekly Per Five */
+            weekly_per_five?: number | null;
+            /** Conversion Source */
+            conversion_source?: string | null;
+            /** Conversion Reason */
+            conversion_reason?: string | null;
+            /**
+             * Trend
+             * @default 1
+             */
+            trend: number;
+            /**
+             * User Active
+             * @default false
+             */
+            user_active: boolean;
+            /** Drift Minutes */
+            drift_minutes?: number | null;
+            weekly?: components["schemas"]["WeeklyOut"] | null;
+            /**
+             * Windows
+             * @default []
+             */
+            windows: components["schemas"]["WindowOut"][];
+            /**
+             * Forecast
+             * @default []
+             */
+            forecast: components["schemas"]["ForecastOut"][];
         };
         /** PreflightOut */
         PreflightOut: {
@@ -1206,6 +1289,44 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** WeeklyOut */
+        WeeklyOut: {
+            /** Free */
+            free: number;
+            /** Manual Future */
+            manual_future: number;
+            /** Reserve */
+            reserve: number;
+            /** Surplus */
+            surplus: number;
+            /** Planned */
+            planned: number;
+            /** Reasons */
+            reasons: string[];
+        };
+        /** WindowOut */
+        WindowOut: {
+            /**
+             * Start
+             * Format: date-time
+             */
+            start: string;
+            /**
+             * End
+             * Format: date-time
+             */
+            end: string;
+            /** Current */
+            current: boolean;
+            /** Manual P90 */
+            manual_p90: number;
+            /** Capacity */
+            capacity: number;
+            /** Allocation */
+            allocation: number;
+            /** Reason */
+            reason: string;
         };
         /** WriteDocIn */
         WriteDocIn: {
@@ -2412,6 +2533,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ControlOut"];
+                };
+            };
+        };
+    };
+    get_plan_api_plan_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanOut"];
                 };
             };
         };

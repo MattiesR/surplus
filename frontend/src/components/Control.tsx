@@ -73,7 +73,7 @@ export function ControlCard({ now }: { now: Date }) {
           <label className="block text-xs muted">
             Reason (optional)
             <input
-              className="field mt-1"
+              className="field mt-1 block w-full"
               value={reason}
               maxLength={200}
               onChange={(e) => setReason(e.target.value)}
@@ -88,7 +88,7 @@ export function ControlCard({ now }: { now: Date }) {
                 disabled={pause.isPending}
                 onClick={() => pause.mutate(p.duration)}
               >
-                Pause {p.label.toLowerCase()}
+                {p.label}
               </button>
             ))}
           </div>

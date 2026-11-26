@@ -16,12 +16,13 @@ export function controlHeadline(c: ControlState, now: Date = new Date()): { tone
     return { tone: "paused", text: `Paused until ${when}`.trim() };
   }
   if (c.user_active) return { tone: "warning", text: "You are active: automatic runs hold back" };
-  return { tone: "ok", text: "Agents may use spare capacity" };
+  if (c.auto_start) return { tone: "ok", text: "Agents may use spare capacity now" };
+  return { tone: "ok", text: "Not paused, and you are idle" };
 }
 
 export const PAUSE_CHOICES: { label: string; duration: string | null }[] = [
-  { label: "1 h", duration: "1h" },
-  { label: "4 h", duration: "4h" },
-  { label: "Until tomorrow", duration: "16h" },
-  { label: "Until I resume", duration: null },
+  { label: "Pause 1 h", duration: "1h" },
+  { label: "Pause 4 h", duration: "4h" },
+  { label: "Pause until tomorrow", duration: "16h" },
+  { label: "Pause until I resume", duration: null },
 ];

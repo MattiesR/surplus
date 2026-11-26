@@ -18,6 +18,7 @@ models of both buckets when they are trustworthy, else from a conservative prior
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import timedelta
 
@@ -129,3 +130,33 @@ def window_capacity(used: float, manual_p90: float, user_active: bool, cfg: Budg
     by_reserve = 100.0 - used - manual - window_reserve(user_active, cfg)
     by_cap = cfg.max_five_hour_pct - used - manual
     return max(0.0, min(by_reserve, by_cap))
+
+
+@dataclass(frozen=True)
+class Conversion:
+    weekly_per_five: float
+    source: str  # "cost model" | "prior"
+    reason: str
+
+
+def weekly_per_five_from_fits(
+    five: Mapping[str, float] | None,
+    weekly: Mapping[str, float] | None,
+    trustworthy: bool,
+    prior: float = WEEKLY_PER_FIVE_PRIOR,
+) -> Conversion:
+    """ppw per pp5 from both buckets' fitted percent-per-token coefficients, by model family (ADR 0012).
+
+    Only fitted (not prior) coefficients of families present in both fits count, and the *largest* ratio is
+    used: the more a 5-hour point costs of the week, the less agent work fits, so the largest is the safe one.
+    """
+    if not trustworthy or not five or not weekly:
+        return Conversion(prior, "prior", "no trustworthy cost model for both buckets yet")
+    ratios = {f: weekly[f] / five[f] for f in five.keys() & weekly.keys() if five[f] > 0 and weekly[f] > 0}
+    if not ratios:
+        return Conversion(prior, "prior", "no model family fitted in both buckets")
+    family, ratio = max(ratios.items(), key=lambda kv: kv[1])
+    ratio = min(1.0, max(0.01, ratio))
+    return Conversion(
+        ratio, "cost model", f"{family}: 1 pp of the 5-hour window = {ratio:.3f} pp of the week"
+    )

@@ -39,6 +39,7 @@ function useLiveUpdates(): boolean {
         } else if (type === "dispatcher.updated" || type === "project.paused") {
           void qc.invalidateQueries({ queryKey: ["control"] });
           void qc.invalidateQueries({ queryKey: ["projects"] });
+          void qc.invalidateQueries({ queryKey: ["plan"] });
         } else if (type === "run.log") {
           appendRunLog(qc, Number(data.id), data.entry as RunLogEntry);
         } else if (type === "run.changed" || type === "run.reported") {
@@ -50,6 +51,8 @@ function useLiveUpdates(): boolean {
         } else {
           void qc.invalidateQueries({ queryKey: ["status"] });
           void qc.invalidateQueries({ queryKey: ["week"] });
+          void qc.invalidateQueries({ queryKey: ["plan"] });
+          void qc.invalidateQueries({ queryKey: ["control"] });
         }
       });
     }

@@ -44,3 +44,12 @@ test("pause and resume agent runs from the dashboard", async ({ page }) => {
   await card.getByRole("button", { name: "Resume" }).click();
   await expect(card.getByRole("button", { name: "Pause 1 h" })).toBeVisible();
 });
+
+test("plan timeline shows windows until the weekly reset, with a table view", async ({ page }) => {
+  await page.goto(`/auth?token=${token()}`);
+  await page.getByRole("button", { name: "Read limits now" }).click();
+  const card = page.getByRole("region", { name: /Plan until the weekly reset/ });
+  await expect(card.getByTestId("plan-stats")).toContainText("Allowed now");
+  await card.getByRole("button", { name: "Table" }).click();
+  await expect(card.getByRole("cell", { name: "now", exact: true })).toBeVisible();
+});

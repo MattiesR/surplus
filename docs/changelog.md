@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — Phase 4: confidence, activity, planner, simulator, guard rails · 2026-11-26
+## Unreleased — Phase 4 done: confidence, activity, planner, simulator, guard rails, timeline · 2026-11-26
 
 **Added**
 - Forecast confidence (`predictor/confidence.py`): history × cost-model fit × reading freshness, each 0-1,
@@ -22,12 +22,18 @@
   (`surplus pause 4h|until-resume`, `surplus resume`, `/api/control`, dashboard card) stops all runs and blocks
   starts; a circuit breaker sets a project to `paused` after 3 failed runs in a row. Runs record their
   `trigger` (manual/auto, migration 0006); `paused` and `user_active` are continuable stop reasons.
+- Live plan (`surplus/planning.py`, `GET /api/plan`): the planner's inputs from the store (reported resets,
+  forecasts, confidence, activity, weekly trend against the week-start forecast, the 5-hour → weekly conversion
+  from both cost models or the prior), with every decision logged and reset drift re-synced.
+- Plan timeline on the dashboard: one bar per 5-hour window until the weekly reset (your P90 forecast and the
+  agents' planned share, hard stop line), allowed-now / weekly surplus / confidence / conversion stats, the
+  reason for every window in the tooltip and a table view, and "why these numbers".
 
 **Changed**
 - The dashboard's "Next planned run" placeholder is now the "Agent runs" control card.
 
 **Phase 4 DoD:** simulator 0 incidents across 3 profiles × 4 weeks with ≥ 75% utilisation on the light profile;
-the kill switch acts within 60 s. Remaining in Phase 4: the plan timeline UI (T-009).
+the kill switch acts within 60 s; the plan timeline is on the dashboard (vitest + Playwright). Phase 4 is done.
 
 ## Unreleased — Phase 4: seasonal baseline predictor · 2026-11-26
 

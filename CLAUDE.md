@@ -9,9 +9,11 @@ fewer permissions, more user control) and record an ADR in `docs/decisions/NNNN-
   rootless Podman container; isolation is container-only (ADR 0003); LAN blocked via internal network + egress proxy (ADR 0005).
 - Phase 1 (skeleton + collector + minimal dashboard): done.
 - Phase 2 (projects, md parsers, watcher, UI): done.
-- Phase 3 (runner + sandbox, manual runs only): done; see `docs/changelog.md`. Phase 4 in progress: cost model,
-  baseline, confidence, activity, budget/planner (ADR 0012), simulator (ADR 0013, `surplus simulate`) and guard
-  rails (ADR 0014: kill switch, `surplus pause`, circuit breaker) done; the plan timeline UI (T-009) remains.
+- Phase 3 (runner + sandbox, manual runs only): done.
+- Phase 4 (predictor + optimizer): done. Cost model (ADR 0009), baseline (ADR 0010/0011), budget/planner
+  (ADR 0012), simulator (ADR 0013, `surplus simulate`, runs in `make check`), guard rails (ADR 0014: kill
+  switch, `surplus pause`, circuit breaker), live plan + timeline (`/api/plan`). Runs stay manual until Phase 5;
+  the dispatcher already enforces pause and the kill switch. Next: Phase 5 (dispatcher + notifications).
 - Surplus is registered as its own Surplus project (`.surplus/` is excluded locally, never committed). Agent runs
   on it get Opus/high effort and may change any code, but never a weaker sandbox (ADR 0008). Review merges of
   `backend/surplus/runner/` with care: merged code runs on the host.
