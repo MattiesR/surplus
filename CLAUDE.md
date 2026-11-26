@@ -14,8 +14,9 @@ fewer permissions, more user control) and record an ADR in `docs/decisions/NNNN-
   (ADR 0012), simulator (ADR 0013, `surplus simulate`, runs in `make check`), guard rails (ADR 0014: kill
   switch, `surplus pause`, circuit breaker), live plan + timeline (`/api/plan`). Runs stay manual until Phase 5;
   the dispatcher already enforces pause and the kill switch.
-- Phase 5 in progress: task selection (ADR 0016) and automatic runs (ADR 0017, opt-in via `surplus auto on`,
-  off by default) and the Inbox (ADR 0018; answers live in decisions.md) done; `surplus install` (T-020) remains.
+- Phase 5 built: task selection (ADR 0016), automatic runs (ADR 0017, opt-in via `surplus auto on`, off by
+  default), the Inbox (ADR 0018; answers live in decisions.md) and `surplus install` (ADR 0019, systemd user
+  service). DoD still needs a week of real unattended running, which the user starts. Next: Phase 6 (Telegram).
 - Plan §16 answered (ADR 0015): project model for auto runs, working hours mon-fri 09-18 (`surplus hours`),
   Telegram for Phase 6, no apt in agent containers.
 - Surplus is registered as its own Surplus project (`.surplus/` is excluded locally, never committed). Agent runs
@@ -27,7 +28,7 @@ fewer permissions, more user control) and record an ADR in `docs/decisions/NNNN-
 - `make runner-image` · `make redteam` (real Podman, no quota) · `make redteam-agent` (real Haiku agent: spends quota;
   only run it deliberately). Tests marked `podman`/`quota` are excluded from `make check`.
 - `make build` regenerates `openapi.json` + `frontend/src/api/schema.d.ts` and builds the SPA into `backend/surplus/static`.
-- `uv run surplus serve|ingest|probe|status|doctor|statusline|simulate|pause|resume|hours|auto …`
+- `uv run surplus serve|ingest|probe|status|doctor|statusline|simulate|pause|resume|hours|auto|install|uninstall|link …`
 - `uv` lives in `~/.local/bin` (the Makefile adds it to PATH).
 
 ## Engineering standards (plan §13)

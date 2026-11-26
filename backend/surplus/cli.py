@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import shutil
 import sys
 from collections.abc import Callable
@@ -62,7 +63,10 @@ def serve(
     paths.ensure()
     settings = Settings.from_env(host=host, port=port)
     token = load_or_create_token(paths.api_token_file)
-    typer.secho(f"Open http://127.0.0.1:{port}/auth?token={token}", fg="green", err=True)
+    if os.environ.get("SURPLUS_SERVICE"):  # under systemd stderr goes to the journal: keep the token out
+        typer.secho(f"Surplus on http://127.0.0.1:{port}/ (sign-in link: `surplus link`)", err=True)
+    else:
+        typer.secho(f"Open http://127.0.0.1:{port}/auth?token={token}", fg="green", err=True)
     uvicorn.run(create_app(paths, settings), host=host, port=port, log_level=log_level)
 
 
@@ -194,6 +198,73 @@ def resume() -> None:
 
     had = _with_session(control.clear_pause)
     typer.echo("Resumed." if had else "Surplus was not paused.")
+
+
+@app.command()
+def link(port: int = 8765) -> None:
+    """Print the dashboard's sign-in link (it contains the local API token: do not share it)."""
+    from surplus.api.auth import load_or_create_token
+
+    paths = Paths.from_env()
+    paths.ensure()
+    typer.echo(f"http://127.0.0.1:{port}/auth?token={load_or_create_token(paths.api_token_file)}")
+
+
+@app.command()
+def install(
+    start: Annotated[bool, typer.Option(help="Enable and start the service now")] = True,
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Print the unit file and do nothing")] = False,
+    port: int = 8765,
+) -> None:
+    """Run Surplus as a systemd user service: it starts at login and restarts after a crash."""
+    from surplus import install as inst
+
+    text = inst.render_unit(
+        inst.surplus_executable(), REPO_ROOT, inst.service_path_env(), dict(os.environ), port
+    )
+    target = inst.unit_dir() / inst.UNIT_NAME
+    if dry_run:
+        typer.echo(f"# {target}\n{text}")
+        return
+    if shutil.which("systemctl") is None:
+        typer.secho("systemctl not found: this needs systemd.", fg="red")
+        raise typer.Exit(1)
+    already = inst.service_state()
+    if start and inst.port_in_use(port) and not already.active:
+        typer.secho(
+            f"Something already listens on 127.0.0.1:{port} (a `surplus serve` you started?). Stop it first,"
+            " or use --no-start and start the service later.",
+            fg="red",
+        )
+        raise typer.Exit(1)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(text, encoding="utf-8")
+    inst.systemctl("daemon-reload")
+    if start:
+        res = inst.systemctl("enable", "--now", inst.UNIT_NAME)
+        if res.returncode != 0:
+            typer.secho(f"systemctl failed: {res.stderr.strip()}", fg="red")
+            raise typer.Exit(1)
+        if already.active:
+            inst.systemctl("restart", inst.UNIT_NAME)
+    typer.echo(f"Wrote {target}.")
+    typer.echo(f"Service: {inst.service_state().describe()}")
+    typer.echo("Logs: journalctl --user -u surplus -f · sign-in link: surplus link")
+
+
+@app.command()
+def uninstall() -> None:
+    """Stop and remove the systemd user service (your data and settings stay)."""
+    from surplus import install as inst
+
+    target = inst.unit_dir() / inst.UNIT_NAME
+    if not target.exists():
+        typer.echo("The service is not installed.")
+        return
+    inst.systemctl("disable", "--now", inst.UNIT_NAME)
+    target.unlink()
+    inst.systemctl("daemon-reload")
+    typer.echo("Service removed. Your data in ~/.local/share/surplus and settings stay.")
 
 
 @app.command()

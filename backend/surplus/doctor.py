@@ -137,6 +137,14 @@ def check_channels() -> Check:
     return Check("notification channels", Level.WARN, "none configured (Phase 6)")
 
 
+def check_service() -> Check:
+    from surplus.install import service_state
+
+    state = service_state()
+    level = Level.OK if state.installed and state.enabled and state.active else Level.WARN
+    return Check("service", level, state.describe())
+
+
 def run_all(paths: Paths, settings: Settings, probe: bool = True) -> list[Check]:
     checks = [check_cli(settings)]
     if probe and checks[0].level is Level.OK:
@@ -147,5 +155,6 @@ def run_all(paths: Paths, settings: Settings, probe: bool = True) -> list[Check]
         check_logs(paths),
         check_percent_source(paths),
         check_channels(),
+        check_service(),
     ]
     return checks

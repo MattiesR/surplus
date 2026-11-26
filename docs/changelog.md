@@ -19,6 +19,13 @@
   project's `decisions.md` with a `T-xxx · rN Qn` reference; hand-written entries count too. The next run's
   prompt contains it, and the run page shows the exact prompt (`GET /api/runs/{id}/prompt`). Automatic runs
   wait for open questions and prefer freshly answered tasks.
+- `surplus install` / `uninstall` (ADR 0019): a systemd user service bound to 127.0.0.1 with no secrets in the
+  unit, `--dry-run` to preview it, a refusal when the port is taken, and a `service` check in
+  `surplus doctor`. Under the service, `serve` keeps the sign-in token out of the journal; `surplus link`
+  prints it on demand.
+
+**Phase 5 status:** all features are built. The DoD also needs a week of real unattended running: turn on
+automatic runs (`surplus auto on`) and install the service.
 
 ## Unreleased — working hours and the plan §16 answers · 2026-11-26
 
