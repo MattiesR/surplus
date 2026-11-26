@@ -147,3 +147,33 @@ def test_refit_is_nightly(sm: sessionmaker[Session], paths: Paths, clock: FakeCl
     assert not collector.cost_model_due()
     clock.advance(timedelta(minutes=1))
     assert collector.cost_model_due()
+
+
+# ------------------------------------------------------------------ predictor inputs from the store (ADR 0011)
+
+
+def test_user_observations_and_forecast_from_the_store(
+    sm: sessionmaker[Session], paths: Paths, clock: FakeClock
+) -> None:
+    _seed(sm)
+    col = _collector(sm, paths, clock)
+    col.refit_cost_models()
+    obs = col.user_observations(FIVE_HOUR)
+    # Two days of 15-min readings: almost every slot is observed; the opus usage is all manual (user) usage.
+    assert len(obs) >= 4 * 48 - 12
+    assert sum(o.manual_pct for o in obs) > 0
+    model = col.forecast_model(FIVE_HOUR)
+    assert model.cold_start and model.history_days == pytest.approx(len(obs) / 96, rel=0.01)
+    assert col.forecast_model(FIVE_HOUR) is model  # cached within the hour
+    clock.advance(timedelta(hours=1, minutes=1))
+    assert col.forecast_model(FIVE_HOUR) is not model
+
+
+def test_activity_from_manual_events(sm: sessionmaker[Session], paths: Paths, clock: FakeClock) -> None:
+    _seed(sm)
+    col = _collector(sm, paths, clock)
+    # The newest manual event is at T0 - 12 min (3 min into the last 15-min slot): 10 min is the window.
+    assert not col.activity().active
+    clock.set(T0 - timedelta(minutes=8))
+    a = col.activity()
+    assert a.active and "manual Claude Code use 4 min ago" in (a.reason or "")

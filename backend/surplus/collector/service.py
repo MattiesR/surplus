@@ -7,6 +7,7 @@ schedule, and answers the dashboard's queries.
 from __future__ import annotations
 
 import asyncio
+import itertools
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 
@@ -34,17 +35,20 @@ from surplus.collector.store import (
     ingest_logs,
     insert_readings,
     insert_snapshot,
+    last_manual_event_at,
     latest_cost_model,
     latest_cost_model_fit_at,
     latest_readings,
     latest_reset_reading,
     mark_source,
+    observation_inputs,
     save_cost_model,
 )
 from surplus.config import Paths, Settings
 from surplus.db.models import SourceStatusRow, SurfaceReadingRow, UsageEventRow
 from surplus.domain.events import Event, EventBus
 from surplus.domain.models import (
+    FIVE_HOUR,
     SEVEN_DAY,
     LimitReading,
     ReadingSource,
@@ -52,7 +56,10 @@ from surplus.domain.models import (
     TokenCounts,
     UsageSnapshot,
 )
-from surplus.predictor.cost_model import CostModelFit, build_windows, fit_cost_model
+from surplus.predictor.activity import RECENT_JUMP, Activity, ReadingRise, user_activity
+from surplus.predictor.baseline import SeasonalBaseline, SlotObservation, fit_baseline
+from surplus.predictor.cost_model import CostModelFit, build_windows, estimate_pct, fit_cost_model
+from surplus.predictor.observations import CostedEvent, user_slot_observations
 
 log = structlog.get_logger(__name__)
 
@@ -61,6 +68,9 @@ ProbeFn = Callable[[], Awaitable[UsageSnapshot]]
 # Cost model (plan §5.3): refit nightly on the last four weeks of windows.
 COST_MODEL_REFIT_EVERY = timedelta(hours=24)
 COST_MODEL_HISTORY = timedelta(days=28)
+# Seasonal baseline (plan §6.1): fitted on 8 weeks (decay half-life 3 weeks), refitted hourly.
+FORECAST_HISTORY = timedelta(weeks=8)
+FORECAST_REFIT_EVERY = timedelta(hours=1)
 
 
 class Collector:
@@ -81,6 +91,7 @@ class Collector:
         self._probe_lock = asyncio.Lock()
         # A fit without coefficients stores nothing; remember the attempt so it is not retried every tick.
         self.last_cost_fit_at: datetime | None = None
+        self._baselines: dict[str, SeasonalBaseline] = {}
 
     # ------------------------------------------------------------------ ingestion
 
@@ -202,6 +213,58 @@ class Collector:
     def cost_model(self, bucket: str) -> CostModelFit | None:
         with self.sm() as session:
             return latest_cost_model(session, bucket)
+
+    # ------------------------------------------------------------------ predictor inputs (plan §6)
+
+    def user_observations(self, bucket: str, history: timedelta = FORECAST_HISTORY) -> list[SlotObservation]:
+        """Per-slot user usage of `bucket` over the last `history` (ADR 0011)."""
+        now = self.clock.now()
+        with self.sm() as session:
+            readings, raw = observation_inputs(session, bucket, now - history, now)
+            fit = latest_cost_model(session, bucket)
+        events = [
+            CostedEvent(ts, estimate_pct(fit, [(model, tokens)]) if fit else None, agent)
+            for ts, model, tokens, agent in raw
+        ]
+        return user_slot_observations(bucket, readings, events, now)
+
+    def forecast_model(self, bucket: str) -> SeasonalBaseline:
+        """The seasonal baseline for `bucket`, refitted at most every FORECAST_REFIT_EVERY."""
+        now = self.clock.now()
+        cached = self._baselines.get(bucket)
+        if cached is not None and now - cached.fitted_at < FORECAST_REFIT_EVERY:
+            return cached
+        obs = self.user_observations(bucket)
+        model = fit_baseline(bucket, obs, self.clock, self.settings.tz())
+        self._baselines[bucket] = model
+        log.info(
+            "forecast.fitted",
+            bucket=bucket,
+            observations=len(obs),
+            history_days=round(model.history_days, 2),
+            cold_start=model.cold_start,
+        )
+        return model
+
+    def activity(self, recent_jump: timedelta = RECENT_JUMP) -> Activity:
+        """Is the user working right now? (plan §6.3)"""
+        now = self.clock.now()
+        start = now - recent_jump - timedelta(hours=1)
+        with self.sm() as session:
+            last_manual = last_manual_event_at(session)
+            readings, raw = observation_inputs(session, FIVE_HOUR, start, now)
+            fit = latest_cost_model(session, FIVE_HOUR)
+        rises: list[ReadingRise] = []
+        ordered = sorted((r for r in readings if r.resets_at is not None), key=lambda r: r.ts)
+        for a, b in itertools.pairwise(ordered):
+            assert a.resets_at is not None
+            assert b.resets_at is not None
+            if abs(a.resets_at - b.resets_at) > timedelta(minutes=5):
+                continue  # a reset in between: the change says nothing about usage
+            inside = [(m, t) for ts, m, t, _ in raw if a.ts < ts <= b.ts]
+            explained = estimate_pct(fit, inside) if fit else None
+            rises.append(ReadingRise(a.ts, b.ts, b.used_pct - a.used_pct, explained))
+        return user_activity(now, last_manual, rises, recent_jump=recent_jump)
 
     # ------------------------------------------------------------------ queries
 

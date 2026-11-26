@@ -261,6 +261,39 @@ def cost_model_inputs(
     return readings, events
 
 
+def observation_inputs(
+    session: Session, bucket: str, start: datetime, end: datetime
+) -> tuple[list[LimitReading], list[tuple[datetime, str, TokenCounts, bool]]]:
+    """Readings of `bucket` and (ts, model, tokens, is_agent) events in `[start, end]`."""
+    readings = [
+        row_to_reading(r)
+        for r in session.scalars(
+            select(LimitReadingRow)
+            .where(LimitReadingRow.bucket == bucket, LimitReadingRow.ts >= start, LimitReadingRow.ts <= end)
+            .order_by(LimitReadingRow.ts)
+        )
+    ]
+    stmt = select(
+        UsageEventRow.ts,
+        UsageEventRow.model,
+        UsageEventRow.input_tok,
+        UsageEventRow.output_tok,
+        UsageEventRow.cache_create_tok,
+        UsageEventRow.cache_read_tok,
+        UsageEventRow.is_agent,
+    ).where(UsageEventRow.ts >= start, UsageEventRow.ts <= end)
+    events = [
+        (ts, model, TokenCounts(input=i, output=o, cache_create=cc, cache_read=cr), agent)
+        for ts, model, i, o, cc, cr, agent in session.execute(stmt)
+    ]
+    return readings, events
+
+
+def last_manual_event_at(session: Session) -> datetime | None:
+    """The newest usage event that is not a Surplus agent's (the user's own Claude Code use)."""
+    return session.scalar(select(func.max(UsageEventRow.ts)).where(UsageEventRow.is_agent.is_(False)))
+
+
 def save_cost_model(session: Session, fit: CostModelFit) -> int:
     """Store one fit as one row per model family (with its R²). A fit without coefficients stores nothing."""
     weights = json.dumps(fit.weights.as_dict(), sort_keys=True)

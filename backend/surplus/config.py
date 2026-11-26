@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field, replace
+from datetime import UTC, tzinfo
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 def _env_path(name: str, default: Path) -> Path:
@@ -101,6 +103,11 @@ class Settings:
     # Empty = open internet (plan §9.2). A list restricts agents to these hosts (ADR 0007), e.g.
     # SURPLUS_EGRESS_ALLOW="api.anthropic.com,pypi.org,files.pythonhosted.org,registry.npmjs.org"
     egress_allow: tuple[str, ...] = ()
+    # IANA name for hour-of-week slots (habits follow the wall clock, ADR 0010); "" = the system's zone.
+    timezone: str = ""
+
+    def tz(self) -> tzinfo:
+        return resolve_timezone(self.timezone)
 
     @classmethod
     def from_env(cls, **overrides: Any) -> Settings:
@@ -112,6 +119,25 @@ class Settings:
             env["egress_allow"] = tuple(
                 h.strip() for h in os.environ["SURPLUS_EGRESS_ALLOW"].split(",") if h.strip()
             )
+        if os.environ.get("SURPLUS_TZ"):
+            env["timezone"] = os.environ["SURPLUS_TZ"]
         if os.environ.get("SURPLUS_RUNNER_IMAGE"):
             env["runner_image"] = os.environ["SURPLUS_RUNNER_IMAGE"]
         return replace(cls(), **{**env, **overrides})
+
+
+def resolve_timezone(name: str = "") -> tzinfo:
+    """`name`, else $TZ, else the zone /etc/localtime points to, else UTC (never a fixed offset: DST)."""
+    candidates = [name, os.environ.get("TZ", "")]
+    localtime = Path("/etc/localtime")
+    if localtime.is_symlink():
+        target = str(localtime.resolve())
+        if "zoneinfo/" in target:
+            candidates.append(target.split("zoneinfo/", 1)[1])
+    for c in candidates:
+        if c:
+            try:
+                return ZoneInfo(c.lstrip(":"))
+            except (ZoneInfoNotFoundError, ValueError):
+                continue
+    return UTC
