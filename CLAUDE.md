@@ -9,7 +9,7 @@ fewer permissions, more user control) and record an ADR in `docs/decisions/NNNN-
   rootless Podman container; isolation is container-only (ADR 0003); LAN blocked via internal network + egress proxy (ADR 0005).
 - Phase 1 (skeleton + collector + minimal dashboard): done.
 - Phase 2 (projects, md parsers, watcher, UI): done.
-- Phase 3 (runner + sandbox, manual runs only): done; see `docs/changelog.md`. Next: Phase 4 (predictor, optimizer).
+- Phase 3 (runner + sandbox, manual runs only): done; see `docs/changelog.md`. Phase 4 in progress: cost model (ADR 0009) and seasonal baseline predictor (ADR 0010) done.
 - Surplus is registered as its own Surplus project (`.surplus/` is excluded locally, never committed). Agent runs
   on it get Opus/high effort and may change any code, but never a weaker sandbox (ADR 0008). Review merges of
   `backend/surplus/runner/` with care: merged code runs on the host.
