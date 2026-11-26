@@ -110,7 +110,9 @@ function Report({ run }: { run: RunDetail }) {
       </div>
       {(r.questions ?? []).length > 0 && (
         <div>
-          <h3 className="text-xs muted">Questions for you (answering them arrives in Phase 5; see the run report)</h3>
+          <h3 className="text-xs muted">
+            Questions for you (<Link href="/inbox">answer them in the Inbox</Link>)
+          </h3>
           <ul className="space-y-1">
             {(r.questions ?? []).map((q) => (
               <li key={q.id}>
@@ -141,6 +143,18 @@ function Report({ run }: { run: RunDetail }) {
         </div>
       )}
     </section>
+  );
+}
+
+function PromptView({ id }: { id: number }) {
+  const prompt = useQuery({ queryKey: ["runprompt", id], queryFn: () => api.runPrompt(id) });
+  if (prompt.error) return <p role="alert">▲ {prompt.error.message}</p>;
+  if (!prompt.data) return <p className="px-4 pb-3 text-xs muted">Loading prompt…</p>;
+  if (!prompt.data.text) return <p className="px-4 pb-3 text-xs muted">No prompt was composed for this run.</p>;
+  return (
+    <pre className="max-h-[70vh] overflow-auto whitespace-pre-wrap p-3 text-xs" aria-label="Prompt">
+      {prompt.data.text}
+    </pre>
   );
 }
 
@@ -234,6 +248,7 @@ export function RunDetailPage({ id }: { id: number }) {
   const run = useQuery({ queryKey: ["run", id], queryFn: () => api.run(id) });
   const log = useQuery({ queryKey: ["runlog", id], queryFn: () => api.runLog(id), staleTime: Infinity });
   const [showDiff, setShowDiff] = useState(false);
+  const [showPrompt, setShowPrompt] = useState(false);
   const action = useMutation({
     mutationFn: (a: "stop" | "cancel" | "merge" | "discard") => api.runAction(id, a),
     onSettled: () => {
@@ -379,6 +394,11 @@ export function RunDetailPage({ id }: { id: number }) {
           <pre className="max-h-[50vh] overflow-auto p-3 text-xs">{r.test_output}</pre>
         </details>
       )}
+
+      <details className="card" onToggle={(e) => setShowPrompt((e.target as HTMLDetailsElement).open)}>
+        <summary className="cursor-pointer px-4 py-2 text-sm">Prompt (what the agent was told)</summary>
+        {showPrompt && <PromptView id={id} />}
+      </details>
 
       {r.commits > 0 && (
         <details className="card" onToggle={(e) => setShowDiff((e.target as HTMLDetailsElement).open)}>

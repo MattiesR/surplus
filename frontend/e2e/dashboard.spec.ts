@@ -79,3 +79,16 @@ test("automatic runs are off by default and can be switched", async ({ page }) =
   await card.getByRole("button", { name: "Turn automatic runs off" }).click();
   await expect(card.getByTestId("control-headline")).toContainText("Automatic runs are off");
 });
+
+test("the inbox is reachable from the nav and by shortcut", async ({ page }) => {
+  await page.goto(`/auth?token=${token()}`);
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /Inbox/ }).click();
+  await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+  await expect(page.getByText("No open questions.")).toBeVisible();
+  await page.keyboard.press("g");
+  await page.keyboard.press("d");
+  await expect(page).toHaveURL(/\/$/);
+  await page.keyboard.press("g");
+  await page.keyboard.press("i");
+  await expect(page).toHaveURL(/\/inbox$/);
+});

@@ -14,6 +14,11 @@
   `run.mode`; the run page shows who started a run and its mode.
 - Tests: opt-in, guard rails, budget, split mode, back-off, and a minute-by-minute fake-clock day (start, kill
   switch, no start while active, restart when idle).
+- Inbox (ADR 0018): the open questions from run reports across projects (`GET /api/inbox`, an Inbox page with
+  a count in the navigation, `g i`). Answer with an option, free text or Skip. The answer is appended to the
+  project's `decisions.md` with a `T-xxx · rN Qn` reference; hand-written entries count too. The next run's
+  prompt contains it, and the run page shows the exact prompt (`GET /api/runs/{id}/prompt`). Automatic runs
+  wait for open questions and prefer freshly answered tasks.
 
 ## Unreleased — working hours and the plan §16 answers · 2026-11-26
 

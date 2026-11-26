@@ -25,6 +25,7 @@ export const EFFORTS: Effort[] = ["low", "medium", "high", "xhigh", "max"];
 export type Control = S["ControlOut"];
 export type PlanOut = S["PlanOut"];
 export type Preferences = S["PreferencesOut"];
+export type InboxQuestion = S["QuestionOut"];
 export type DocName = "project" | "goals" | "backlog" | "decisions";
 
 export class ApiError extends Error {
@@ -108,6 +109,9 @@ export const api = {
   plan: () => request<PlanOut>("/api/plan"),
   preferences: () => request<Preferences>("/api/preferences"),
   setPreferences: (body: S["PreferencesIn"]) => request<Preferences>("/api/preferences", json("PUT", body)),
+  inbox: () => request<InboxQuestion[]>("/api/inbox"),
+  answer: (body: S["AnswerIn"]) => request<InboxQuestion[]>("/api/inbox/answer", json("POST", body)),
+  runPrompt: (id: number) => request<{ text: string }>(`/api/runs/${id}/prompt`),
   control: () => request<Control>("/api/control"),
   pause: (duration: string | null, reason = "") =>
     request<Control>("/api/control/pause", json("POST", duration ? { duration, reason } : { reason })),

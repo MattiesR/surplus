@@ -983,6 +983,68 @@
         }
       }
     },
+    "/api/runs/{run_id}/prompt": {
+      "get": {
+        "tags": [
+          "runs"
+        ],
+        "summary": "Run Prompt",
+        "operationId": "run_prompt_api_runs__run_id__prompt_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/surplus__api__runs__ErrorOut"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/surplus__api__runs__ErrorOut"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/surplus__api__runs__ErrorOut"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
+    },
     "/api/runs/{run_id}/diff": {
       "get": {
         "tags": [
@@ -1632,6 +1694,76 @@
         }
       }
     },
+    "/api/inbox": {
+      "get": {
+        "tags": [
+          "inbox"
+        ],
+        "summary": "List Inbox",
+        "operationId": "list_inbox_api_inbox_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/QuestionOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Inbox Api Inbox Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/inbox/answer": {
+      "post": {
+        "tags": [
+          "inbox"
+        ],
+        "summary": "Answer",
+        "operationId": "answer_api_inbox_answer_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnswerIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/QuestionOut"
+                  },
+                  "type": "array",
+                  "title": "Response Answer Api Inbox Answer Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "summary": "Health",
@@ -1771,6 +1903,44 @@
   },
   "components": {
     "schemas": {
+      "AnswerIn": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "maxLength": 100,
+            "title": "Project Id"
+          },
+          "run_id": {
+            "type": "integer",
+            "title": "Run Id"
+          },
+          "question_id": {
+            "type": "string",
+            "pattern": "^Q\\d{1,3}$",
+            "title": "Question Id"
+          },
+          "answer": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer",
+            "description": "null = skip: the agent decides"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project_id",
+          "run_id",
+          "question_id"
+        ],
+        "title": "AnswerIn"
+      },
       "AssistIn": {
         "properties": {
           "name": {
@@ -2966,6 +3136,20 @@
         ],
         "title": "ProjectDetail"
       },
+      "PromptOut": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "The prompt and run rules this run was started with; empty if not composed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "PromptOut"
+      },
       "Question": {
         "properties": {
           "id": {
@@ -3005,6 +3189,89 @@
           "text"
         ],
         "title": "Question"
+      },
+      "QuestionOut": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "project_name": {
+            "type": "string",
+            "title": "Project Name"
+          },
+          "run_id": {
+            "type": "integer",
+            "title": "Run Id"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
+          },
+          "task_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Title"
+          },
+          "question_id": {
+            "type": "string",
+            "title": "Question Id"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Options"
+          },
+          "recommended": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended"
+          },
+          "asked_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Asked At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project_id",
+          "project_name",
+          "run_id",
+          "task_id",
+          "task_title",
+          "question_id",
+          "text",
+          "options",
+          "recommended",
+          "asked_at"
+        ],
+        "title": "QuestionOut"
       },
       "ReorderIn": {
         "properties": {

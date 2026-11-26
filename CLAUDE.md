@@ -15,7 +15,7 @@ fewer permissions, more user control) and record an ADR in `docs/decisions/NNNN-
   switch, `surplus pause`, circuit breaker), live plan + timeline (`/api/plan`). Runs stay manual until Phase 5;
   the dispatcher already enforces pause and the kill switch.
 - Phase 5 in progress: task selection (ADR 0016) and automatic runs (ADR 0017, opt-in via `surplus auto on`,
-  off by default) done; Inbox/decisions loop (T-019) and `surplus install` (T-020) remain.
+  off by default) and the Inbox (ADR 0018; answers live in decisions.md) done; `surplus install` (T-020) remains.
 - Plan §16 answered (ADR 0015): project model for auto runs, working hours mon-fri 09-18 (`surplus hours`),
   Telegram for Phase 6, no apt in agent containers.
 - Surplus is registered as its own Surplus project (`.surplus/` is excluded locally, never committed). Agent runs

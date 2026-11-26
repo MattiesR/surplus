@@ -22,6 +22,7 @@ from surplus.clock import Clock
 from surplus.collector.service import Collector
 from surplus.db.models import RunRow, SettingRow
 from surplus.domain.events import Event, EventBus
+from surplus.inbox import Inbox
 from surplus.optimizer import control
 from surplus.optimizer.guard_rails import (
     BREAKER_FAILURES,
@@ -66,9 +67,11 @@ class Dispatcher:
         projects: ProjectService,
         max_concurrent: int,
         planner: PlanService | None = None,
+        inbox: Inbox | None = None,
     ) -> None:
         self.sm, self.clock, self.bus = sm, clock, bus
         self.planner = planner
+        self.inbox = inbox
         self._backoff: dict[tuple[str, str], datetime] = {}
         self.collector, self.runs, self.projects = collector, runs, projects
         self.max_concurrent = max_concurrent
@@ -146,6 +149,15 @@ class Dispatcher:
                     )
                 ).all()
             )
+            last_run = {
+                (p, t): ts
+                for p, t, ts in session.execute(
+                    select(RunRow.project_id, RunRow.task_id, func.max(RunRow.created_at)).group_by(
+                        RunRow.project_id, RunRow.task_id
+                    )
+                ).all()
+            }
+        questions = self.inbox.by_task() if self.inbox else {}
         out: list[Candidate] = []
         for prow in self.projects.registry.rows(include_missing=False):
             if prow.status != repo.ProjectStatus.ACTIVE.value:
@@ -160,6 +172,8 @@ class Dispatcher:
             for pos, item in enumerate(snap.backlog.items):
                 if item.done or item.proposed or "blocked" in item.flags:
                     continue
+                key = (prow.id, item.id)
+                q = questions.get(key)
                 out.append(
                     Candidate(
                         project_id=prow.id,
@@ -170,6 +184,12 @@ class Dispatcher:
                         position=pos,
                         size=item.size.value if item.size else None,
                         awaiting_review=(prow.id, item.id) in waiting,
+                        question_pending=bool(q and q.pending),
+                        answered=bool(
+                            q
+                            and q.answered_at
+                            and (last_run.get(key) is None or q.answered_at >= last_run[key])
+                        ),
                     )
                 )
         return out

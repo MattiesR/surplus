@@ -5,6 +5,7 @@ import { Link, match, navigate, usePath, useShortcuts } from "./lib/router";
 import { Dashboard } from "./pages/Dashboard";
 import { NewProject } from "./pages/NewProject";
 import { ProjectDetailPage } from "./pages/ProjectDetail";
+import { InboxPage } from "./pages/Inbox";
 import { Projects } from "./pages/Projects";
 import { appendRunLog, RunDetailPage } from "./pages/RunDetail";
 
@@ -18,6 +19,7 @@ const EVENTS = [
   "run.reported",
   "run.log",
   "dispatcher.updated",
+  "inbox.changed",
   "project.paused",
 ];
 
@@ -36,6 +38,8 @@ function useLiveUpdates(): boolean {
           const id = data.id as string | undefined;
           void qc.invalidateQueries({ queryKey: ["projects"] });
           if (id) void qc.invalidateQueries({ queryKey: ["project", id] });
+        } else if (type === "inbox.changed") {
+          void qc.invalidateQueries({ queryKey: ["inbox"] });
         } else if (type === "dispatcher.updated" || type === "project.paused") {
           void qc.invalidateQueries({ queryKey: ["control"] });
           void qc.invalidateQueries({ queryKey: ["projects"] });
@@ -44,6 +48,7 @@ function useLiveUpdates(): boolean {
           appendRunLog(qc, Number(data.id), data.entry as RunLogEntry);
         } else if (type === "run.changed" || type === "run.reported") {
           void qc.invalidateQueries({ queryKey: ["runs"] });
+          if (type === "run.reported") void qc.invalidateQueries({ queryKey: ["inbox"] });
           void qc.invalidateQueries({ queryKey: ["run", Number(data.id)] });
           if (type === "run.reported" && typeof data.project_id === "string") {
             void qc.invalidateQueries({ queryKey: ["project", data.project_id] });
@@ -61,7 +66,7 @@ function useLiveUpdates(): boolean {
   return connected;
 }
 
-function NavLink({ href, label, active }: { href: string; label: string; active: boolean }) {
+function NavLink({ href, label, active, badge }: { href: string; label: string; active: boolean; badge?: number }) {
   return (
     <Link
       href={href}
@@ -70,6 +75,12 @@ function NavLink({ href, label, active }: { href: string; label: string; active:
       style={active ? { background: "var(--surface-2)" } : { color: "var(--text-secondary)" }}
     >
       {label}
+      {badge ? (
+        <span className="ml-1.5 rounded-full px-1.5 text-xs tabular-nums" style={{ background: "var(--surface-2)" }}>
+          {badge}
+          <span className="sr-only"> open</span>
+        </span>
+      ) : null}
     </Link>
   );
 }
@@ -79,8 +90,14 @@ export function App() {
   const live = useLiveUpdates();
   // A cheap authenticated call decides between the app and the sign-in hint.
   const auth = useQuery({ queryKey: ["status"], queryFn: api.status, refetchInterval: 60_000 });
+  const inbox = useQuery({ queryKey: ["inbox"], queryFn: api.inbox, refetchInterval: 60_000, enabled: auth.isSuccess });
   const shortcuts = useMemo(
-    () => ({ "g d": () => navigate("/"), "g p": () => navigate("/projects"), "n p": () => navigate("/projects/new") }),
+    () => ({
+      "g d": () => navigate("/"),
+      "g p": () => navigate("/projects"),
+      "g i": () => navigate("/inbox"),
+      "n p": () => navigate("/projects/new"),
+    }),
     [],
   );
   useShortcuts(shortcuts);
@@ -104,6 +121,7 @@ export function App() {
   else if ((params = match("/projects/:id/:tab?", path)))
     page = <ProjectDetailPage id={params.id!} tab={params.tab ?? "overview"} />;
   else if ((params = match("/runs/:id", path))) page = <RunDetailPage id={Number(params.id)} />;
+  else if (match("/inbox", path)) page = <InboxPage />;
   else
     page = (
       <p className="card p-4 text-sm">
@@ -120,8 +138,9 @@ export function App() {
         <nav aria-label="Main" className="flex gap-1">
           <NavLink href="/" label="Dashboard" active={path === "/"} />
           <NavLink href="/projects" label="Projects" active={path.startsWith("/projects")} />
+          <NavLink href="/inbox" label="Inbox" active={path === "/inbox"} badge={inbox.data?.length} />
         </nav>
-        <span className="ml-auto text-xs muted" role="status" title="Shortcuts: g d · g p · n p">
+        <span className="ml-auto text-xs muted" role="status" title="Shortcuts: g d · g p · g i · n p">
           <span aria-hidden style={{ color: live ? "var(--status-good)" : "var(--status-warning)" }}>
             ●
           </span>{" "}
@@ -130,7 +149,8 @@ export function App() {
       </header>
       <main>{page}</main>
       <footer className="pb-4 text-xs muted">
-        Surplus {auth.data?.version} · shortcuts: <kbd>g d</kbd> dashboard · <kbd>g p</kbd> projects · <kbd>n p</kbd>{" "}
+        Surplus {auth.data?.version} · shortcuts: <kbd>g d</kbd> dashboard · <kbd>g p</kbd> projects · <kbd>g i</kbd> inbox ·{" "}
+        <kbd>n p</kbd>{" "}
         new project
       </footer>
     </div>

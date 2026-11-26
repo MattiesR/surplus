@@ -211,6 +211,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/runs/{run_id}/prompt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Run Prompt */
+        get: operations["run_prompt_api_runs__run_id__prompt_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/runs/{run_id}/diff": {
         parameters: {
             query?: never;
@@ -436,6 +453,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/inbox": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Inbox */
+        get: operations["list_inbox_api_inbox_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inbox/answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Answer */
+        post: operations["answer_api_inbox_answer_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -542,6 +593,20 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AnswerIn */
+        AnswerIn: {
+            /** Project Id */
+            project_id: string;
+            /** Run Id */
+            run_id: number;
+            /** Question Id */
+            question_id: string;
+            /**
+             * Answer
+             * @description null = skip: the agent decides
+             */
+            answer?: string | null;
+        };
         /** AssistIn */
         AssistIn: {
             /** Name */
@@ -950,6 +1015,14 @@ export interface components {
             /** Errors */
             errors: components["schemas"]["DocError"][];
         };
+        /** PromptOut */
+        PromptOut: {
+            /**
+             * Text
+             * @description The prompt and run rules this run was started with; empty if not composed
+             */
+            text: string;
+        };
         /** Question */
         Question: {
             /** Id */
@@ -960,6 +1033,32 @@ export interface components {
             options?: string[];
             /** Recommended */
             recommended?: string | null;
+        };
+        /** QuestionOut */
+        QuestionOut: {
+            /** Project Id */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /** Run Id */
+            run_id: number;
+            /** Task Id */
+            task_id: string | null;
+            /** Task Title */
+            task_title: string | null;
+            /** Question Id */
+            question_id: string;
+            /** Text */
+            text: string;
+            /** Options */
+            options: string[];
+            /** Recommended */
+            recommended: string | null;
+            /**
+             * Asked At
+             * Format: date-time
+             */
+            asked_at: string;
         };
         /** ReorderIn */
         ReorderIn: {
@@ -2194,6 +2293,55 @@ export interface operations {
             };
         };
     };
+    run_prompt_api_runs__run_id__prompt_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["surplus__api__runs__ErrorOut"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["surplus__api__runs__ErrorOut"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["surplus__api__runs__ErrorOut"];
+                };
+            };
+        };
+    };
     run_diff_api_runs__run_id__diff_get: {
         parameters: {
             query?: never;
@@ -2718,6 +2866,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlanOut"];
+                };
+            };
+        };
+    };
+    list_inbox_api_inbox_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionOut"][];
+                };
+            };
+        };
+    };
+    answer_api_inbox_answer_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnswerIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

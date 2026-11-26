@@ -190,6 +190,18 @@ def run_log(request: Request, run_id: int, after: int = Query(default=0, ge=0)) 
     return [LogEntryOut.model_validate(e) for e in svc.log_entries(run_id, after)]
 
 
+class PromptOut(BaseModel):
+    text: str = Field(description="The prompt and run rules this run was started with; empty if not composed")
+
+
+@router.get("/runs/{run_id}/prompt", responses=ERRORS)
+def run_prompt(request: Request, run_id: int) -> PromptOut:
+    svc = _svc(request)
+    _get(svc, run_id)
+    path = svc.run_dir(run_id) / "prompt.md"
+    return PromptOut(text=path.read_text(encoding="utf-8")[:200_000] if path.exists() else "")
+
+
 @router.get("/runs/{run_id}/diff", responses=ERRORS)
 def run_diff(request: Request, run_id: int) -> DiffOut:
     svc = _svc(request)
