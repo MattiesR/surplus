@@ -19,9 +19,10 @@ test("dashboard shows gauges after reading limits", async ({ page }) => {
 
 test("manual calibration is keyboard-usable and validated", async ({ page }) => {
   await page.goto(`/auth?token=${token()}`);
-  const input = page.getByLabel("% used");
+  const card = page.getByRole("region", { name: "Manual calibration" });
+  const input = card.getByLabel("% used");
   await input.fill("150");
-  await expect(page.getByRole("button", { name: "Save" })).toBeDisabled();
+  await expect(card.getByRole("button", { name: "Save" })).toBeDisabled();
   await input.fill("34");
   await input.press("Enter");
   await expect(input).toHaveValue("");
@@ -30,8 +31,9 @@ test("manual calibration is keyboard-usable and validated", async ({ page }) => 
 test("chart has a table view", async ({ page }) => {
   await page.goto(`/auth?token=${token()}`);
   await page.getByRole("button", { name: "Read limits now" }).click();
-  await page.getByRole("button", { name: "Table" }).click();
-  await expect(page.getByRole("table")).toBeVisible();
+  const card = page.getByRole("region", { name: /Weekly limit used this week/ });
+  await card.getByRole("button", { name: "Table" }).click();
+  await expect(card.getByRole("table")).toBeVisible();
 });
 
 test("pause and resume agent runs from the dashboard", async ({ page }) => {
@@ -52,4 +54,18 @@ test("plan timeline shows windows until the weekly reset, with a table view", as
   await expect(card.getByTestId("plan-stats")).toContainText("Allowed now");
   await card.getByRole("button", { name: "Table" }).click();
   await expect(card.getByRole("cell", { name: "now", exact: true })).toBeVisible();
+});
+
+test("working hours are validated and saved", async ({ page }) => {
+  await page.goto(`/auth?token=${token()}`);
+  const card = page.getByRole("region", { name: "Your working hours" });
+  const input = card.getByLabel(/When you usually use Claude/);
+  await input.fill("whenever");
+  await card.getByRole("button", { name: "Save" }).click();
+  await expect(card.getByRole("alert")).toContainText("not a range");
+  await input.fill("mon-fri 09:00-18:00");
+  await card.getByRole("button", { name: "Save" }).click();
+  await expect(card.getByText(/Template: mon-fri 09:00-18:00 \(45 h a week\)/)).toBeVisible();
+  await card.getByRole("button", { name: "Remove" }).click();
+  await expect(card.getByText(/No template/)).toBeVisible();
 });

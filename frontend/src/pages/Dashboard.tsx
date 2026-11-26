@@ -6,6 +6,7 @@ import { Gauge } from "../components/Gauge";
 import { PlanTimeline } from "../components/PlanTimeline";
 import { CalibrateCard, SourcesCard, SplitCard } from "../components/Panels";
 import { UsageChart } from "../components/UsageChart";
+import { WorkingHoursCard } from "../components/WorkingHours";
 
 function useNow(intervalMs = 30_000): Date {
   const [now, setNow] = useState(() => new Date());
@@ -79,9 +80,10 @@ export function Dashboard() {
         <ControlCard now={now} />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-3">
         <SourcesCard sources={s?.sources ?? []} />
         <CalibrateCard busy={manual.isPending} onSubmit={(bucket, value) => manual.mutate({ bucket, value })} />
+        <WorkingHoursCard />
       </div>
     </div>
   );

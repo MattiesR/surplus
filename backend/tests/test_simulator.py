@@ -67,3 +67,11 @@ def test_cli_simulate_exit_code(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "0 user-blocked incidents" in out.output and "week of" in out.output
     bad = CliRunner().invoke(app, ["simulate", "--profile", "nope"])
     assert bad.exit_code != 0
+
+
+@pytest.mark.parametrize("name", ["light", "irregular"])
+def test_cold_start_with_a_working_hours_template_stays_safe(name: str) -> None:
+    """No history at all, only the template; for the irregular user it is wrong (they work evenings)."""
+    res = simulate(PROFILES[name], SimConfig(weeks=2, warmup_weeks=0, working_hours="mon-fri 09-18"))
+    assert res.incidents == [], res.summary()
+    assert res.runs > 0

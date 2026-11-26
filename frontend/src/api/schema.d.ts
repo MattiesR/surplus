@@ -384,6 +384,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Preferences */
+        get: operations["get_preferences_api_preferences_get"];
+        /** Put Preferences */
+        put: operations["put_preferences_api_preferences_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/plan": {
         parameters: {
             query?: never;
@@ -781,6 +799,23 @@ export interface components {
              * @default []
              */
             forecast: components["schemas"]["ForecastOut"][];
+        };
+        /** PreferencesIn */
+        PreferencesIn: {
+            /** Working Hours */
+            working_hours?: string | null;
+        };
+        /** PreferencesOut */
+        PreferencesOut: {
+            /**
+             * Working Hours
+             * @description e.g. 'mon-fri 09:00-18:00'; null = no template
+             */
+            working_hours: string | null;
+            /** Working Hours Text */
+            working_hours_text: string | null;
+            /** Timezone */
+            timezone: string;
         };
         /** PreflightOut */
         PreflightOut: {
@@ -2533,6 +2568,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ControlOut"];
+                };
+            };
+        };
+    };
+    get_preferences_api_preferences_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreferencesOut"];
+                };
+            };
+        };
+    };
+    put_preferences_api_preferences_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreferencesIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreferencesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

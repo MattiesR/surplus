@@ -24,6 +24,7 @@ export type Effort = NonNullable<RunIn["effort"]>;
 export const EFFORTS: Effort[] = ["low", "medium", "high", "xhigh", "max"];
 export type Control = S["ControlOut"];
 export type PlanOut = S["PlanOut"];
+export type Preferences = S["PreferencesOut"];
 export type DocName = "project" | "goals" | "backlog" | "decisions";
 
 export class ApiError extends Error {
@@ -105,6 +106,8 @@ export const api = {
   continueRun: (id: number, maxFiveHourPct: number) =>
     request<Run>(`/api/runs/${id}/continue`, json("POST", { max_five_hour_pct: maxFiveHourPct })),
   plan: () => request<PlanOut>("/api/plan"),
+  preferences: () => request<Preferences>("/api/preferences"),
+  setPreferences: (body: S["PreferencesIn"]) => request<Preferences>("/api/preferences", json("PUT", body)),
   control: () => request<Control>("/api/control"),
   pause: (duration: string | null, reason = "") =>
     request<Control>("/api/control/pause", json("POST", duration ? { duration, reason } : { reason })),

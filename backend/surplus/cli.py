@@ -197,6 +197,29 @@ def resume() -> None:
 
 
 @app.command()
+def hours(
+    spec: Annotated[
+        str | None,
+        typer.Argument(help="e.g. 'mon-fri 09:00-18:00' or 'mon-fri 9-18; sat 10-13'; 'none' removes it"),
+    ] = None,
+) -> None:
+    """Show or set your typical working hours (the cold-start template of the predictor)."""
+    from surplus import preferences
+
+    if spec is None:
+        current = _with_session(preferences.get_working_hours)
+        typer.echo(f"Working hours: {current.describe()}" if current else "No working hours set.")
+        return
+    try:
+        result = _with_session(
+            lambda s: preferences.set_working_hours(s, None if spec.strip().lower() == "none" else spec)
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo(f"Working hours: {result.describe()}" if result else "Working hours removed.")
+
+
+@app.command()
 def simulate(
     profile: Annotated[str, typer.Option(help="light, heavy-weekday, irregular or all")] = "all",
     weeks: Annotated[int, typer.Option(min=1, max=52)] = 4,

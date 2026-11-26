@@ -4,13 +4,17 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import structlog
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from surplus import preferences
 from surplus.dispatcher import Dispatcher
+from surplus.domain.events import Event
 from surplus.optimizer import control
 
 router = APIRouter(prefix="/api", tags=["control"])
+log = structlog.get_logger(__name__)
 
 
 class ControlOut(BaseModel):
@@ -80,3 +84,41 @@ async def resume(request: Request) -> ControlOut:
     d = _dispatcher(request)
     await d.resume()
     return _out(d)
+
+
+class PreferencesOut(BaseModel):
+    working_hours: str | None = Field(description="e.g. 'mon-fri 09:00-18:00'; null = no template")
+    working_hours_text: str | None
+    timezone: str
+
+
+class PreferencesIn(BaseModel):
+    working_hours: str | None = Field(default=None, max_length=200)
+
+
+def _prefs(request: Request) -> PreferencesOut:
+    hours = request.app.state.collector.working_hours()
+    tz = request.app.state.settings.tz()
+    return PreferencesOut(
+        working_hours=hours.spec if hours else None,
+        working_hours_text=hours.describe() if hours else None,
+        timezone=str(getattr(tz, "key", tz)),
+    )
+
+
+@router.get("/preferences")
+def get_preferences(request: Request) -> PreferencesOut:
+    return _prefs(request)
+
+
+@router.put("/preferences")
+def put_preferences(request: Request, body: PreferencesIn) -> PreferencesOut:
+    sm = request.app.state.collector.sm
+    try:
+        with sm.begin() as session:
+            hours = preferences.set_working_hours(session, body.working_hours)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    log.info("preferences.working_hours", spec=hours.spec if hours else None)
+    request.app.state.collector.bus.publish(Event("limits.updated", {"source": "preferences"}))
+    return _prefs(request)

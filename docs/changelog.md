@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased — working hours and the plan §16 answers · 2026-11-26
+
+**Added**
+- Working-hours template (ADR 0015): `surplus hours "mon-fri 09:00-18:00"`, `GET/PUT /api/preferences` and a
+  dashboard card. During cold start, the predictor stays fully conservative inside working hours and stops
+  assuming the worst outside them. A changed template refits at once. The simulator has a cold-start
+  regression test with a right and a wrong template.
+- ADR 0015 records the user's answers to plan §16: the project's own model for automatic runs, Telegram as
+  the phone channel (Phase 6), and no system packages in agent containers.
+
 ## Unreleased — Phase 4 done: confidence, activity, planner, simulator, guard rails, timeline · 2026-11-26
 
 **Added**

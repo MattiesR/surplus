@@ -27,6 +27,7 @@ from surplus.optimizer.budget import BudgetConfig, usage_trend
 from surplus.optimizer.planner import PlanInputs, plan
 from surplus.predictor.baseline import SlotForecast, SlotObservation, fit_baseline
 from surplus.predictor.confidence import ConfidenceInputs, confidence
+from surplus.predictor.template import parse_working_hours, template_for
 from surplus.simulator.profiles import SLOT, Profile
 
 # A Wednesday 20:00 UTC: the weekly reset of plan §2.3.
@@ -45,6 +46,7 @@ class SimConfig:
     min_run_pct: float = 5.0  # a task needs room: do not start a run for less than this (pp5)
     max_run_slots: int = 8  # a run lasts at most 2 h
     budget: BudgetConfig = field(default_factory=BudgetConfig)
+    working_hours: str | None = None  # the cold-start template (ADR 0015)
 
 
 @dataclass(frozen=True)
@@ -118,6 +120,9 @@ def simulate(profile: Profile, cfg: SimConfig = SimConfig()) -> SimResult:
     fw: list[SlotForecast] = []
     f_starts: list[datetime] = []
     history_days = 0.0
+    hours = parse_working_hours(cfg.working_hours) if cfg.working_hours else None
+    t5 = template_for(hours, FIVE_HOUR) if hours else None
+    tw = template_for(hours, SEVEN_DAY) if hours else None
     week_model = None  # the weekly forecast as it was at the last weekly reset (the trend's reference)
     run: _Run | None = None
     active = False
@@ -135,11 +140,11 @@ def simulate(profile: Profile, cfg: SimConfig = SimConfig()) -> SimResult:
                 result.weeks.append(WeekStats(next_week - timedelta(weeks=1), user_week, agent_week_total))
             weekly_used = agent_week = user_week = agent_week_total = 0.0
             next_week += timedelta(weeks=1)
-            week_model = fit_baseline(SEVEN_DAY, obsw, clock)
+            week_model = fit_baseline(SEVEN_DAY, obsw, clock, template=tw)
         # ---- daily refit of the predictor on what it has seen so far
         if (t.hour == 0 and t.minute == 0) or not f5:
-            b5 = fit_baseline(FIVE_HOUR, obs5, clock)
-            bw = fit_baseline(SEVEN_DAY, obsw, clock)
+            b5 = fit_baseline(FIVE_HOUR, obs5, clock, template=t5)
+            bw = fit_baseline(SEVEN_DAY, obsw, clock, template=tw)
             horizon = t + timedelta(weeks=1, days=1)
             f5, fw = b5.forecast(t, horizon), bw.forecast(t, horizon)
             f_starts = [f.slot_start for f in f5]

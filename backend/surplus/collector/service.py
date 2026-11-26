@@ -60,6 +60,8 @@ from surplus.predictor.activity import RECENT_JUMP, Activity, ReadingRise, user_
 from surplus.predictor.baseline import SeasonalBaseline, SlotObservation, fit_baseline
 from surplus.predictor.cost_model import CostModelFit, build_windows, estimate_pct, fit_cost_model
 from surplus.predictor.observations import CostedEvent, user_slot_observations
+from surplus.predictor.template import WorkingHours, template_for
+from surplus.preferences import get_working_hours
 
 log = structlog.get_logger(__name__)
 
@@ -234,33 +236,48 @@ class Collector:
         ]
         return user_slot_observations(bucket, readings, events, now)
 
+    def working_hours(self) -> WorkingHours | None:
+        with self.sm() as session:
+            return get_working_hours(session)
+
+    def _template(self, bucket: str) -> tuple[str, list[float] | None]:
+        hours = self.working_hours()
+        return (hours.spec if hours else ""), (template_for(hours, bucket) if hours else None)
+
     def forecast_model(self, bucket: str) -> SeasonalBaseline:
-        """The seasonal baseline for `bucket`, refitted at most every FORECAST_REFIT_EVERY."""
+        """The seasonal baseline for `bucket`, refitted at most every FORECAST_REFIT_EVERY, and at once
+        when the working-hours template changes."""
         now = self.clock.now()
-        cached = self._baselines.get(bucket)
+        spec, template = self._template(bucket)
+        key = f"{bucket}|{spec}"
+        cached = self._baselines.get(key)
         if cached is not None and now - cached.fitted_at < FORECAST_REFIT_EVERY:
             return cached
         obs = self.user_observations(bucket)
-        model = fit_baseline(bucket, obs, self.clock, self.settings.tz())
-        self._baselines[bucket] = model
+        model = fit_baseline(bucket, obs, self.clock, self.settings.tz(), template)
+        for old in [k for k in self._baselines if k.startswith(f"{bucket}|")]:
+            del self._baselines[old]
+        self._baselines[key] = model
         log.info(
             "forecast.fitted",
             bucket=bucket,
             observations=len(obs),
             history_days=round(model.history_days, 2),
             cold_start=model.cold_start,
+            template=spec or None,
         )
         return model
 
     def week_start_model(self, bucket: str, week_start: datetime) -> SeasonalBaseline:
         """The baseline as it was at the start of this week: the reference of the weekly trend (ADR 0012).
         A model refitted during the week already contains the week, so it would always look "as forecast"."""
-        key = f"{bucket}@{week_start.isoformat()}"
+        spec, template = self._template(bucket)
+        key = f"{bucket}@{week_start.isoformat()}|{spec}"
         cached = self._baselines.get(key)
         if cached is not None:
             return cached
         obs = [o for o in self.user_observations(bucket) if o.slot_start < week_start]
-        model = fit_baseline(bucket, obs, FakeClock(week_start), self.settings.tz())
+        model = fit_baseline(bucket, obs, FakeClock(week_start), self.settings.tz(), template)
         for old in [k for k in self._baselines if k.startswith(f"{bucket}@")]:
             del self._baselines[old]
         self._baselines[key] = model
