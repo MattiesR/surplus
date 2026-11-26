@@ -89,6 +89,29 @@ def snapshot_bundle(repo: Path, dest: Path) -> None:
     git(repo, "bundle", "create", str(dest), "--all", timeout=600)
 
 
+def clone_problem(repo: Path) -> str | None:
+    """Why a run could not clone `repo`, or None. `git ls-remote` runs the same server side as `git clone`,
+    including git's ownership check of the `.git` directory (run r1 failed on exactly that)."""
+    proc = subprocess.run(
+        [*_BASE, "ls-remote", "--quiet", str(repo), "HEAD"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env=_env(),
+        check=False,
+    )
+    if proc.returncode == 0:
+        return None
+    err = proc.stderr.strip()
+    if "dubious ownership" in err:
+        git_dir = repo / ".git"
+        return (
+            f"git refuses to read {git_dir} (owned by another user, e.g. on an NTFS mount); run: "
+            f"git config --global --add safe.directory {git_dir}"
+        )
+    return f"the repository cannot be cloned: {err.splitlines()[-1] if err else proc.returncode}"
+
+
 def prepare_clone(repo: Path, dest: Path, branch: str, existing: bool = False) -> str:
     """Clone `repo` into `dest` (copied objects, no hardlinks, no remote) on a new `branch`, or, with
     `existing`, on the project's existing `branch` (a continuation picks up where its parent stopped).
@@ -106,7 +129,7 @@ def prepare_clone(repo: Path, dest: Path, branch: str, existing: bool = False) -
         env=_env(),
     )
     if proc.returncode != 0:
-        raise GitError(f"git clone: {proc.stderr.strip()[-400:]}")
+        raise GitError(f"git clone: {proc.stderr.strip()[-1500:]}")
     if existing:
         git(dest, "checkout", "--quiet", "-B", branch, f"refs/remotes/origin/{branch}")
     git(dest, "remote", "remove", "origin")

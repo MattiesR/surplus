@@ -543,3 +543,12 @@ def test_fetch_update_only_fast_forwards(tmp_path: Path) -> None:
     with pytest.raises(gitops.GitError):
         gitops.fetch_branch(project, clone, "feature", update=True)  # non-fast-forward: refused
     assert git(project, "log", "--format=%s", "-1", "feature").strip() == "b"
+
+
+def test_clone_problem_is_reported_by_preflight(env: Env, tmp_path: Path) -> None:
+    from surplus.runner import gitops
+
+    assert gitops.clone_problem(env.folder) is None
+    # The "dubious ownership" branch needs a repo owned by another uid, which a test cannot create.
+    msg = gitops.clone_problem(tmp_path / "not-a-repo")
+    assert msg is not None and msg.startswith("the repository cannot be cloned")

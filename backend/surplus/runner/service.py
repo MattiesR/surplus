@@ -244,6 +244,8 @@ class RunService:
         state = gitops.repo_state(snap.root)
         if state.head_sha is None:
             problems.append("the repository has no commits yet; make a first commit")
+        elif clone := gitops.clone_problem(snap.root):
+            problems.append(clone)
         if state.dirty_files:
             warnings.append(
                 f"uncommitted changes ({', '.join(state.dirty_files[:3])}) are not included: "
