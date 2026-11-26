@@ -51,7 +51,7 @@ def test_kill_switch_stops_automatic_runs_only() -> None:
 @pytest.mark.parametrize(
     ("allowed", "fresh", "active", "why"),
     [
-        (None, True, [], "no plan"),
+        (None, True, [], "no plan yet"),
         (50.0, False, [], "no fresh reset"),
         (50.0, True, [ActiveRun(1, "manual")], "in progress"),
         (2.0, True, [], "needs 5"),
@@ -63,6 +63,8 @@ def test_auto_start_needs_room_fresh_resets_and_a_free_slot(
     d = guard(IDLE, None, active, allowed, fresh, 1)
     assert not d.auto_start and why in d.reason and d.stops == ()
     assert guard(IDLE, None, [], 6.0, True, 1).auto_start
+    off = guard(IDLE, None, [], 60.0, True, 1, auto_enabled=False)
+    assert not off.auto_start and "off" in off.reason
 
 
 def test_breaker() -> None:

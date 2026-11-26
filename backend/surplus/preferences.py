@@ -38,3 +38,21 @@ def set_working_hours(session: Session, spec: str | None) -> WorkingHours | None
     else:
         row.value_json = value
     return hours
+
+
+AUTO_RUNS_KEY = "auto_runs"
+
+
+def auto_runs_enabled(session: Session) -> bool:
+    """Automatic runs are opt-in (ADR 0017): off unless the user turned them on."""
+    row = session.get(SettingRow, AUTO_RUNS_KEY)
+    return bool(row is not None and json.loads(row.value_json) is True)
+
+
+def set_auto_runs(session: Session, enabled: bool) -> bool:
+    row = session.get(SettingRow, AUTO_RUNS_KEY)
+    if row is None:
+        session.add(SettingRow(key=AUTO_RUNS_KEY, value_json=json.dumps(enabled)))
+    else:
+        row.value_json = json.dumps(enabled)
+    return enabled

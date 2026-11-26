@@ -336,7 +336,11 @@ class RunService:
         max_turns: int | None = None,
         effort: str | None = None,
         trigger: str = "manual",
+        budget: float | None = None,
+        mode: str = "work",
     ) -> RunRow:
+        """Start a run. `budget` (pp of the 5-hour window, the planner's allowed_now) lowers the run's hard
+        stop to the current usage plus the budget, so the live enforcement stops it there."""
         async with self._start_lock:
             if not await self.runtime.image_exists(self.settings.runner_image):
                 raise PreflightError(
@@ -349,6 +353,12 @@ class RunService:
             assert snap.backlog is not None
             task = snap.backlog.get(task_id)
             now = self.clock.now()
+            cap, run_budget = pf.cap_five_hour_pct, pf.budget_pct
+            if budget is not None:
+                used = next((r.used_pct for r in self.latest_readings() if r.bucket == FIVE_HOUR), None)
+                if used is not None:
+                    cap = min(cap, used + max(0.0, budget))
+                run_budget = min(run_budget, budget) if run_budget is not None else budget
             with self.sm.begin() as session:
                 row = RunRow(
                     project_id=project_id,
@@ -357,12 +367,13 @@ class RunService:
                     state=S.QUEUED.value,
                     model=pf.model,
                     max_turns=max_turns or pf.max_turns,
-                    budget_pct=pf.budget_pct,
+                    budget_pct=run_budget,
                     effort=pf.effort,
-                    cap_five_hour_pct=pf.cap_five_hour_pct,
+                    cap_five_hour_pct=cap,
                     cap_weekly_pct=pf.cap_weekly_pct,
                     timeout_minutes=pf.timeout_minutes,
                     trigger=trigger,
+                    mode=mode,
                     commits=0,
                     base_dirty=any("uncommitted" in w for w in pf.warnings),
                     created_at=now,
@@ -378,9 +389,10 @@ class RunService:
                 task=task_id,
                 model=pf.model,
                 effort=pf.effort,
-                cap_five_hour_pct=pf.cap_five_hour_pct,
-                budget_pct=pf.budget_pct,
+                cap_five_hour_pct=cap,
+                budget_pct=run_budget,
                 trigger=trigger,
+                mode=mode,
             )
             self._live[run_id] = _Live()
             self._publish_changed(run_id)
@@ -698,6 +710,7 @@ class RunService:
             branch=branch,
             test_command=snap.meta.test_command,
             max_turns=row.max_turns,
+            split=row.mode == "split",
         )
         (rdir / "prompt.md").write_text(
             composed.prompt + "\n\n---\n\n" + composed.system_append, encoding="utf-8"

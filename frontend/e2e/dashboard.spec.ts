@@ -69,3 +69,13 @@ test("working hours are validated and saved", async ({ page }) => {
   await card.getByRole("button", { name: "Remove" }).click();
   await expect(card.getByText(/No template/)).toBeVisible();
 });
+
+test("automatic runs are off by default and can be switched", async ({ page }) => {
+  await page.goto(`/auth?token=${token()}`);
+  const card = page.getByRole("region", { name: "Agent runs" });
+  await expect(card.getByTestId("control-headline")).toContainText("Automatic runs are off");
+  await card.getByRole("button", { name: "Turn automatic runs on" }).click();
+  await expect(card.getByRole("button", { name: "Turn automatic runs off" })).toBeVisible();
+  await card.getByRole("button", { name: "Turn automatic runs off" }).click();
+  await expect(card.getByTestId("control-headline")).toContainText("Automatic runs are off");
+});

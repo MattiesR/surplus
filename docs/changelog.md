@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased — Phase 5: task selection and automatic runs · 2026-11-26
+
+**Added**
+- Task selection (`optimizer/selection.py`, plan §7.4, ADR 0016): answered questions first, then project
+  priority, task priority and backlog order. Size fit (S 5 / M 15 / L 30 pp), with split mode for a large task
+  in a small slot. A work-conserving 7-day fair share per project. Hypothesis: a project stays within its cap
+  plus one run.
+- Automatic runs (ADR 0017), **off by default**: `surplus auto on|off`, `POST /api/control/auto` and a switch
+  on the dashboard. On each loop tick, when every guard rail allows it, the dispatcher selects a task and
+  starts it with `trigger=auto` and a hard stop of current usage + `allowed_now`. A split-mode prompt asks
+  for smaller tasks instead of changes. A refused start backs off for 30 minutes. Migration 0007 adds
+  `run.mode`; the run page shows who started a run and its mode.
+- Tests: opt-in, guard rails, budget, split mode, back-off, and a minute-by-minute fake-clock day (start, kill
+  switch, no start while active, restart when idle).
+
 ## Unreleased — working hours and the plan §16 answers · 2026-11-26
 
 **Added**

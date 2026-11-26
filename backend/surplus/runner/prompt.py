@@ -74,6 +74,7 @@ def compose(
     branch: str,
     test_command: str | None,
     max_turns: int,
+    split: bool = False,
 ) -> RunPrompt:
     """`recent_runs` is [(filename, markdown)] newest first."""
     prompt = _env.get_template("run.md.j2").render(
@@ -84,6 +85,7 @@ def compose(
         notes="\n".join(task.notes),
         decisions=decision_lines(decisions, task.id),
         recent_runs=[run_summary(n, t) for n, t in recent_runs[:MAX_RECENT_RUNS]],
+        split=split,
     )
     rules = _env.get_template("rules.md.j2").render(
         branch=branch,

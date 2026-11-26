@@ -55,6 +55,8 @@ class RunOut(BaseModel):
     cap_weekly_pct: float | None
     timeout_minutes: int | None
     parent_run_id: int | None = Field(description="Set on a continuation: the run it carries on")
+    trigger: str = Field(description="manual: you pressed Run; auto: the dispatcher started it")
+    mode: str = Field(description="work, or split: propose smaller tasks instead of implementing")
     can_continue: bool = Field(description="Stopped by its cap, turns or time; the user may let it continue")
     created_at: datetime
     started_at: datetime | None
@@ -139,6 +141,8 @@ def _out(row: RunRow) -> RunOut:
         cap_weekly_pct=row.cap_weekly_pct,
         timeout_minutes=row.timeout_minutes,
         parent_run_id=row.parent_run_id,
+        trigger=row.trigger,
+        mode=row.mode,
         can_continue=can_continue(row),
         created_at=row.created_at,
         started_at=row.started_at,

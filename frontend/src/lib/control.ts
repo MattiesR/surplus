@@ -16,6 +16,7 @@ export function controlHeadline(c: ControlState, now: Date = new Date()): { tone
     return { tone: "paused", text: `Paused until ${when}`.trim() };
   }
   if (c.user_active) return { tone: "warning", text: "You are active: automatic runs hold back" };
+  if (!c.auto_enabled) return { tone: "ok", text: "Automatic runs are off" };
   if (c.auto_start) return { tone: "ok", text: "Agents may use spare capacity now" };
   return { tone: "ok", text: "Not paused, and you are idle" };
 }

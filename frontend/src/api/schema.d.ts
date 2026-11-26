@@ -367,6 +367,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/control/auto": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set Auto */
+        post: operations["set_auto_api_control_auto_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/control/resume": {
         parameters: {
             query?: never;
@@ -542,6 +559,11 @@ export interface components {
             /** Goals */
             goals: components["schemas"]["GoalIn"][];
         };
+        /** AutoIn */
+        AutoIn: {
+            /** Enabled */
+            enabled: boolean;
+        };
         /** BucketOut */
         BucketOut: {
             /** Bucket */
@@ -597,6 +619,8 @@ export interface components {
             checked_at: string | null;
             /** Breaker Paused */
             breaker_paused: string[];
+            /** Auto Enabled */
+            auto_enabled: boolean;
         };
         /** CreateProjectIn */
         CreateProjectIn: {
@@ -1003,6 +1027,16 @@ export interface components {
              */
             parent_run_id: number | null;
             /**
+             * Trigger
+             * @description manual: you pressed Run; auto: the dispatcher started it
+             */
+            trigger: string;
+            /**
+             * Mode
+             * @description work, or split: propose smaller tasks instead of implementing
+             */
+            mode: string;
+            /**
              * Can Continue
              * @description Stopped by its cap, turns or time; the user may let it continue
              */
@@ -1098,6 +1132,16 @@ export interface components {
              * @description Set on a continuation: the run it carries on
              */
             parent_run_id: number | null;
+            /**
+             * Trigger
+             * @description manual: you pressed Run; auto: the dispatcher started it
+             */
+            trigger: string;
+            /**
+             * Mode
+             * @description work, or split: propose smaller tasks instead of implementing
+             */
+            mode: string;
             /**
              * Can Continue
              * @description Stopped by its cap, turns or time; the user may let it continue
@@ -2529,6 +2573,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["PauseIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_auto_api_control_auto_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutoIn"];
             };
         };
         responses: {

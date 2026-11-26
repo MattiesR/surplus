@@ -29,6 +29,7 @@ class ControlOut(BaseModel):
     reason: str  # why or why not
     checked_at: datetime | None
     breaker_paused: list[str]  # projects the circuit breaker paused since the server started
+    auto_enabled: bool  # the user's opt-in to automatic runs (ADR 0017)
 
 
 class PauseIn(BaseModel):
@@ -58,6 +59,7 @@ def _out(d: Dispatcher) -> ControlOut:
         reason=decision.reason if decision else "not checked yet",
         checked_at=st.at,
         breaker_paused=list(st.tripped),
+        auto_enabled=st.auto_enabled,
     )
 
 
@@ -76,6 +78,17 @@ async def pause(request: Request, body: PauseIn) -> ControlOut:
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     await d.pause(duration, body.reason)
+    return _out(d)
+
+
+class AutoIn(BaseModel):
+    enabled: bool
+
+
+@router.post("/control/auto")
+async def set_auto(request: Request, body: AutoIn) -> ControlOut:
+    d = _dispatcher(request)
+    await d.set_auto(body.enabled)
     return _out(d)
 
 

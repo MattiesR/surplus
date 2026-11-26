@@ -328,6 +328,10 @@ export function RunDetailPage({ id }: { id: number }) {
       </div>
 
       <dl className="card grid grid-cols-2 gap-3 p-4 text-sm md:grid-cols-4">
+        <Fact label="Started">
+          {r.trigger === "auto" ? "automatically, in spare capacity" : "by you"}
+          {r.mode === "split" ? " · split into smaller tasks" : ""}
+        </Fact>
         <Fact label="Model">
           {r.model}
           {r.effort ? ` · ${r.effort} effort` : ""} · max {r.max_turns} turns

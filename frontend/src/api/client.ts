@@ -112,6 +112,7 @@ export const api = {
   pause: (duration: string | null, reason = "") =>
     request<Control>("/api/control/pause", json("POST", duration ? { duration, reason } : { reason })),
   resume: () => request<Control>("/api/control/resume", { method: "POST" }),
+  setAuto: (enabled: boolean) => request<Control>("/api/control/auto", json("POST", { enabled })),
   runAction: (id: number, action: "stop" | "cancel" | "merge" | "discard") =>
     request<Run>(`/api/runs/${id}/${action}`, { method: "POST" }),
 };

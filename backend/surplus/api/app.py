@@ -130,9 +130,11 @@ def create_app(
         token=lambda: read_secret(paths.secrets_file, CLAUDE_TOKEN),
         claude_bin=lambda: resolve_claude_bin(settings.claude_bin),
     )
-    dispatcher = Dispatcher(sm, clock, bus, collector, runs, project_service, settings.max_concurrent_runs)
-    collector.after_ingest.append(dispatcher.tick)
     planner = PlanService(sm, clock, collector)
+    dispatcher = Dispatcher(
+        sm, clock, bus, collector, runs, project_service, settings.max_concurrent_runs, planner
+    )
+    collector.after_ingest.append(dispatcher.loop_tick)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:

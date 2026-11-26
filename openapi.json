@@ -1489,6 +1489,47 @@
         }
       }
     },
+    "/api/control/auto": {
+      "post": {
+        "tags": [
+          "control"
+        ],
+        "summary": "Set Auto",
+        "operationId": "set_auto_api_control_auto_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutoIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/control/resume": {
       "post": {
         "tags": [
@@ -1775,6 +1816,19 @@
         ],
         "title": "AssistOut"
       },
+      "AutoIn": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "title": "AutoIn"
+      },
       "BucketOut": {
         "properties": {
           "bucket": {
@@ -1931,6 +1985,10 @@
             },
             "type": "array",
             "title": "Breaker Paused"
+          },
+          "auto_enabled": {
+            "type": "boolean",
+            "title": "Auto Enabled"
           }
         },
         "type": "object",
@@ -1945,7 +2003,8 @@
           "auto_start",
           "reason",
           "checked_at",
-          "breaker_paused"
+          "breaker_paused",
+          "auto_enabled"
         ],
         "title": "ControlOut"
       },
@@ -3191,6 +3250,16 @@
             "title": "Parent Run Id",
             "description": "Set on a continuation: the run it carries on"
           },
+          "trigger": {
+            "type": "string",
+            "title": "Trigger",
+            "description": "manual: you pressed Run; auto: the dispatcher started it"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode",
+            "description": "work, or split: propose smaller tasks instead of implementing"
+          },
           "can_continue": {
             "type": "boolean",
             "title": "Can Continue",
@@ -3290,6 +3359,8 @@
           "cap_weekly_pct",
           "timeout_minutes",
           "parent_run_id",
+          "trigger",
+          "mode",
           "can_continue",
           "created_at",
           "started_at",
@@ -3592,6 +3663,16 @@
             "title": "Parent Run Id",
             "description": "Set on a continuation: the run it carries on"
           },
+          "trigger": {
+            "type": "string",
+            "title": "Trigger",
+            "description": "manual: you pressed Run; auto: the dispatcher started it"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode",
+            "description": "work, or split: propose smaller tasks instead of implementing"
+          },
           "can_continue": {
             "type": "boolean",
             "title": "Can Continue",
@@ -3654,6 +3735,8 @@
           "cap_weekly_pct",
           "timeout_minutes",
           "parent_run_id",
+          "trigger",
+          "mode",
           "can_continue",
           "created_at",
           "started_at",

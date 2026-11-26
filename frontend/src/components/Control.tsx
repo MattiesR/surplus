@@ -33,9 +33,15 @@ export function ControlCard({ now }: { now: Date }) {
     onSettled: onDone,
   });
 
+  const auto = useMutation({
+    mutationFn: api.setAuto,
+    onSuccess: (data) => qc.setQueryData(["control"], data),
+    onSettled: onDone,
+  });
+
   const c = control.data;
   const head = c ? controlHeadline(c, now) : null;
-  const error = pause.error ?? resume.error ?? control.error;
+  const error = pause.error ?? resume.error ?? auto.error ?? control.error;
   return (
     <section className="card p-4" aria-labelledby="control-title">
       <h2 id="control-title" className="mb-2 text-sm font-medium muted">
@@ -61,7 +67,31 @@ export function ControlCard({ now }: { now: Date }) {
               Paused after 3 failed runs: {c.breaker_paused.join(", ")}. Check the runs, then set the project active.
             </p>
           )}
-          <p className="muted text-xs">Runs are started by hand until the dispatcher arrives (Phase 5).</p>
+        </div>
+      )}
+      {c && (
+        <div className="mt-3 border-t pt-3 text-sm" style={{ borderColor: "var(--border)" }}>
+          {c.auto_enabled ? (
+            <>
+              <p className="text-xs muted">
+                Surplus starts runs on its own when the plan has room and you are idle, within each project's
+                hard stops. Every run waits for your review.
+              </p>
+              <button className="btn mt-2" onClick={() => auto.mutate(false)} disabled={auto.isPending}>
+                Turn automatic runs off
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-xs muted">
+                Runs start only when you press Run. Turned on, Surplus starts them itself in spare capacity:
+                never while you work or while paused, and never past the plan or the hard stops.
+              </p>
+              <button className="btn mt-2" onClick={() => auto.mutate(true)} disabled={auto.isPending}>
+                Turn automatic runs on
+              </button>
+            </>
+          )}
         </div>
       )}
       {c?.paused ? (

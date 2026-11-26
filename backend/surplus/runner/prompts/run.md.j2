@@ -31,4 +31,11 @@
 - {{ r }}
 {%- endfor %}
 {% endif %}
+{%- if split %}
+# This run: split the task, do not implement it
+The task is too large for the room this run has. Explore the repository, then propose 2-5 smaller tasks that
+together deliver it, each small (S or M) with a clear title and why, in `next_suggestions`. Do not change
+any files and make no commits; the report is the whole result.
+{%- else %}
 Start by exploring the repository, then implement the task.
+{%- endif %}

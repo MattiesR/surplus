@@ -175,7 +175,6 @@ export function PlanTimeline() {
               </ul>
             </details>
           )}
-          <p className="mt-1 text-xs muted">Runs are started by hand until the dispatcher arrives (Phase 5).</p>
         </>
       )}
     </section>

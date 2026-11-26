@@ -192,6 +192,8 @@ class RunRow(Base):
     parent_run_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     # Who started it: "manual" (the user pressed Run) or "auto" (the dispatcher, Phase 5). ADR 0014.
     trigger: Mapped[str] = mapped_column(String, default="manual")
+    # "work", or "split": the task is too large for the slot and the agent proposes smaller tasks (ADR 0016).
+    mode: Mapped[str] = mapped_column(String, default="work")
     created_at: Mapped[datetime] = mapped_column(UTCDateTime)
     started_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)

@@ -13,6 +13,7 @@ const base: ControlState = {
   reason: "no fresh reset times",
   checked_at: "2026-11-26T10:00:00Z",
   breaker_paused: [],
+  auto_enabled: true,
 };
 
 describe("controlHeadline", () => {
@@ -25,6 +26,9 @@ describe("controlHeadline", () => {
     const timed = controlHeadline({ ...base, paused: true, paused_until: "2026-11-26T11:00:00Z" }, now);
     expect(timed.tone).toBe("paused");
     expect(timed.text).toMatch(/^Paused until \S/);
+  });
+  it("says when automatic runs are off", () => {
+    expect(controlHeadline({ ...base, auto_enabled: false }, now).text).toBe("Automatic runs are off");
   });
   it("shows the kill switch when the user is active", () => {
     expect(controlHeadline({ ...base, user_active: true }, now).tone).toBe("warning");

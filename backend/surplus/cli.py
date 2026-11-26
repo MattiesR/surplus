@@ -197,6 +197,26 @@ def resume() -> None:
 
 
 @app.command()
+def auto(
+    state: Annotated[str | None, typer.Argument(help="on or off; omit to show the current state")] = None,
+) -> None:
+    """Turn automatic runs on or off (off by default). The server acts on it on its next tick."""
+    from surplus import preferences
+
+    if state is None:
+        on = _with_session(preferences.auto_runs_enabled)
+    elif state in ("on", "off"):
+        on = _with_session(lambda s: preferences.set_auto_runs(s, state == "on"))
+    else:
+        raise typer.BadParameter("use on or off")
+    typer.echo(
+        "Automatic runs are ON: Surplus starts runs when the plan has room and you are idle."
+        if on
+        else "Automatic runs are off: runs start only when you press Run."
+    )
+
+
+@app.command()
 def hours(
     spec: Annotated[
         str | None,
