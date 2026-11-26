@@ -41,6 +41,8 @@ class ExitReason(StrEnum):
     INTERRUPTED = "interrupted"  # Surplus restarted mid-run
     PREFLIGHT = "preflight"
     INTERNAL_ERROR = "internal_error"
+    USER_ACTIVE = "user_active"  # kill switch: the user started working (plan §7.3)
+    PAUSED = "paused"  # global pause from the UI, CLI or phone
 
 
 S = RunState

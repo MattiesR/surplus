@@ -104,6 +104,8 @@ STOP_EXPLANATIONS = {
     "budget_exhausted": "it reached the 5-hour hard stop",
     "max_turns": "it used all its turns",
     "timeout": "it reached the wall-clock limit",
+    "user_active": "the user started working and has priority",
+    "paused": "the user paused Surplus",
 }
 
 

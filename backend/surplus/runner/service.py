@@ -28,6 +28,7 @@ from surplus.config import Paths, Settings
 from surplus.db.models import RunRow
 from surplus.domain.events import Event, EventBus
 from surplus.domain.models import FIVE_HOUR
+from surplus.optimizer import control
 from surplus.projects import repo
 from surplus.projects.backlog import Backlog, BacklogItem, Size
 from surplus.projects.registry import ProjectRegistry
@@ -93,7 +94,17 @@ def run_name(run_id: int) -> str:
 
 
 # A run stopped for one of these reasons may be continued, but only when the user allows it (ADR 0008).
-CONTINUABLE = frozenset({ExitReason.BUDGET.value, ExitReason.MAX_TURNS.value, ExitReason.TIMEOUT.value})
+# Stops that are the user's (or the guard rails' on the user's behalf), not a failure.
+GUARD_STOPS = frozenset({ExitReason.USER_STOP, ExitReason.PAUSED, ExitReason.USER_ACTIVE})
+CONTINUABLE = frozenset(
+    {
+        ExitReason.BUDGET.value,
+        ExitReason.MAX_TURNS.value,
+        ExitReason.TIMEOUT.value,
+        ExitReason.USER_ACTIVE.value,
+        ExitReason.PAUSED.value,
+    }
+)
 
 
 def can_continue(row: RunRow) -> bool:
@@ -166,6 +177,13 @@ class RunService:
             for r in rows:
                 session.expunge(r)
         return {r.project_id: r for r in rows}
+
+    def active_runs(self) -> list[RunRow]:
+        with self.sm() as session:
+            rows = list(session.scalars(select(RunRow).where(RunRow.state.in_([s.value for s in ACTIVE]))))
+            for r in rows:
+                session.expunge(r)
+        return rows
 
     def active_count(self) -> int:
         with self.sm() as session:
@@ -273,6 +291,10 @@ class RunService:
     def _runtime_problems(self, limits: Limits) -> list[str]:
         """Checks shared by a new run and a continuation: concurrency, limits, token, CLI."""
         problems: list[str] = []
+        with self.sm() as session:
+            pause = control.get_pause(session, self.clock.now())
+        if pause is not None:
+            problems.append(f"Surplus is {pause.describe()}; resume first")
         if self.active_count() >= self.settings.max_concurrent_runs:
             problems.append("another run is in progress")
         readings = self.latest_readings()
@@ -313,6 +335,7 @@ class RunService:
         model: str | None = None,
         max_turns: int | None = None,
         effort: str | None = None,
+        trigger: str = "manual",
     ) -> RunRow:
         async with self._start_lock:
             if not await self.runtime.image_exists(self.settings.runner_image):
@@ -339,6 +362,7 @@ class RunService:
                     cap_five_hour_pct=pf.cap_five_hour_pct,
                     cap_weekly_pct=pf.cap_weekly_pct,
                     timeout_minutes=pf.timeout_minutes,
+                    trigger=trigger,
                     commits=0,
                     base_dirty=any("uncommitted" in w for w in pf.warnings),
                     created_at=now,
@@ -356,6 +380,7 @@ class RunService:
                 effort=pf.effort,
                 cap_five_hour_pct=pf.cap_five_hour_pct,
                 budget_pct=pf.budget_pct,
+                trigger=trigger,
             )
             self._live[run_id] = _Live()
             self._publish_changed(run_id)
@@ -592,7 +617,7 @@ class RunService:
             raise
         except PreflightError as exc:
             live = self._live.get(run_id)
-            stopped = live is not None and live.stop_reason is ExitReason.USER_STOP
+            stopped = live is not None and live.stop_reason in GUARD_STOPS
             self._update(
                 run_id,
                 state=S.PAUSED_BY_USER

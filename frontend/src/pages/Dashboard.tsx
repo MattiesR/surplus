@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import { ControlCard } from "../components/Control";
 import { Gauge } from "../components/Gauge";
 import { CalibrateCard, SourcesCard, SplitCard } from "../components/Panels";
 import { UsageChart } from "../components/UsageChart";
@@ -70,12 +71,7 @@ export function Dashboard() {
         <div className="md:col-span-2">
           <SplitCard split={s?.week_split ?? null} />
         </div>
-        <section className="card p-4" aria-labelledby="next-title">
-          <h2 id="next-title" className="mb-2 text-sm font-medium muted">
-            Next planned run
-          </h2>
-          <p className="text-sm muted">The planner arrives in Phase 4. Nothing will run on its own until then.</p>
-        </section>
+        <ControlCard now={now} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">

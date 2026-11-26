@@ -1427,6 +1427,89 @@
         }
       }
     },
+    "/api/control": {
+      "get": {
+        "tags": [
+          "control"
+        ],
+        "summary": "Get Control",
+        "operationId": "get_control_api_control_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/control/pause": {
+      "post": {
+        "tags": [
+          "control"
+        ],
+        "summary": "Pause",
+        "operationId": "pause_api_control_pause_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PauseIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/control/resume": {
+      "post": {
+        "tags": [
+          "control"
+        ],
+        "summary": "Resume",
+        "operationId": "resume_api_control_resume_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "summary": "Health",
@@ -1687,6 +1770,103 @@
           "max_five_hour_pct"
         ],
         "title": "ContinueIn"
+      },
+      "ControlOut": {
+        "properties": {
+          "paused": {
+            "type": "boolean",
+            "title": "Paused"
+          },
+          "paused_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paused Until"
+          },
+          "paused_indefinitely": {
+            "type": "boolean",
+            "title": "Paused Indefinitely"
+          },
+          "pause_reason": {
+            "type": "string",
+            "title": "Pause Reason"
+          },
+          "user_active": {
+            "type": "boolean",
+            "title": "User Active"
+          },
+          "activity_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activity Reason"
+          },
+          "last_seen": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen"
+          },
+          "auto_start": {
+            "type": "boolean",
+            "title": "Auto Start"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "breaker_paused": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Breaker Paused"
+          }
+        },
+        "type": "object",
+        "required": [
+          "paused",
+          "paused_until",
+          "paused_indefinitely",
+          "pause_reason",
+          "user_active",
+          "activity_reason",
+          "last_seen",
+          "auto_start",
+          "reason",
+          "checked_at",
+          "breaker_paused"
+        ],
+        "title": "ControlOut"
       },
       "CreateProjectIn": {
         "properties": {
@@ -2017,6 +2197,31 @@
           "used_pct"
         ],
         "title": "ManualReadingIn"
+      },
+      "PauseIn": {
+        "properties": {
+          "duration": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 16
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration",
+            "description": "e.g. 30m, 4h or 2d; omit to pause until you resume"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Reason",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "PauseIn"
       },
       "PreflightOut": {
         "properties": {

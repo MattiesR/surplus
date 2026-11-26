@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse, RedirectResponse, Response, Streamin
 from pydantic import BaseModel, Field
 
 from surplus import __version__
+from surplus.api import control as control_api
 from surplus.api import projects as projects_api
 from surplus.api import runs as runs_api
 from surplus.api.auth import _eq, load_or_create_token, make_middleware, set_auth_cookies
@@ -25,6 +26,7 @@ from surplus.collector.reset_watcher import project_reset
 from surplus.collector.service import Collector, ProbeFn
 from surplus.config import Paths, Settings
 from surplus.db.session import make_engine, make_sessionmaker, migrate
+from surplus.dispatcher import Dispatcher
 from surplus.domain.events import EventBus
 from surplus.projects.registry import ProjectRegistry
 from surplus.projects.service import ProjectService
@@ -126,6 +128,8 @@ def create_app(
         token=lambda: read_secret(paths.secrets_file, CLAUDE_TOKEN),
         claude_bin=lambda: resolve_claude_bin(settings.claude_bin),
     )
+    dispatcher = Dispatcher(sm, clock, bus, collector, runs, project_service, settings.max_concurrent_runs)
+    collector.after_ingest.append(dispatcher.tick)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -156,8 +160,10 @@ def create_app(
     app.state.settings = settings
     app.state.paths = paths
     app.state.runs = runs
+    app.state.dispatcher = dispatcher
     app.include_router(projects_api.router)
     app.include_router(runs_api.router)
+    app.include_router(control_api.router)
     allowed_hosts = frozenset(f"{h}:{settings.port}" for h in ("127.0.0.1", "localhost"))
     app.middleware("http")(make_middleware(token, allowed_hosts))
 

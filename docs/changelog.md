@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased — Phase 4: confidence, activity, planner, simulator, guard rails · 2026-11-26
+
+**Added**
+- Forecast confidence (`predictor/confidence.py`): history × cost-model fit × reading freshness, each 0-1,
+  with reasons. Activity detector (`predictor/activity.py`): a manual session event in the last 10 min, or an
+  unexplained rise ≥ 1 pp in the last 30 min, means the user is active.
+- Per-slot user usage from readings and logs (`predictor/observations.py`, ADR 0011), wired into the collector
+  (`user_observations`, `forecast_model` refitted hourly over 8 weeks, `activity`). `SURPLUS_TZ` sets the time
+  zone of the hour-of-week slots (default: the system's).
+- Budget and window planner (`optimizer/budget.py`, `optimizer/planner.py`, plan §7.1-7.2, ADR 0012): weekly
+  surplus with a confidence-scaled reserve and the end-of-week sweep, per-window capacity under the hard stops,
+  windows projected from the reported resets, a back-loaded water-filling spread, reset-drift detection, and a
+  weekly trend correction when the user is busier than forecast. Hypothesis: no plan exceeds a limit under P90
+  user usage.
+- Simulator (`surplus simulate --profile light|heavy-weekday|irregular|all --weeks N`, ADR 0013): the real
+  predictor, planner and guard rails with a fake runner. 0 user-blocked incidents on all profiles and a
+  light-then-heavy switch; utilisation light 90%, heavy-weekday 83%, irregular 88%. Runs in CI.
+- Guard rails (`optimizer/guard_rails.py`, `surplus/dispatcher.py`, plan §7.3, ADR 0014): the kill switch
+  wraps up automatic runs on the tick after manual activity (≤ 60 s); a global pause
+  (`surplus pause 4h|until-resume`, `surplus resume`, `/api/control`, dashboard card) stops all runs and blocks
+  starts; a circuit breaker sets a project to `paused` after 3 failed runs in a row. Runs record their
+  `trigger` (manual/auto, migration 0006); `paused` and `user_active` are continuable stop reasons.
+
+**Changed**
+- The dashboard's "Next planned run" placeholder is now the "Agent runs" control card.
+
+**Phase 4 DoD:** simulator 0 incidents across 3 profiles × 4 weeks with ≥ 75% utilisation on the light profile;
+the kill switch acts within 60 s. Remaining in Phase 4: the plan timeline UI (T-009).
+
 ## Unreleased — Phase 4: seasonal baseline predictor · 2026-11-26
 
 **Added**

@@ -33,3 +33,14 @@ test("chart has a table view", async ({ page }) => {
   await page.getByRole("button", { name: "Table" }).click();
   await expect(page.getByRole("table")).toBeVisible();
 });
+
+test("pause and resume agent runs from the dashboard", async ({ page }) => {
+  await page.goto(`/auth?token=${token()}`);
+  const card = page.getByRole("region", { name: "Agent runs" });
+  await card.getByLabel("Reason (optional)").fill("e2e demo");
+  await card.getByRole("button", { name: "Pause 4 h" }).click();
+  await expect(card.getByTestId("control-headline")).toContainText("Paused until");
+  await expect(card.getByText("Reason: e2e demo")).toBeVisible();
+  await card.getByRole("button", { name: "Resume" }).click();
+  await expect(card.getByRole("button", { name: "Pause 1 h" })).toBeVisible();
+});

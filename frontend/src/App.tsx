@@ -17,6 +17,8 @@ const EVENTS = [
   "run.changed",
   "run.reported",
   "run.log",
+  "dispatcher.updated",
+  "project.paused",
 ];
 
 /** Live updates: the API pushes events over SSE and each one refetches the queries it affects. */
@@ -34,6 +36,9 @@ function useLiveUpdates(): boolean {
           const id = data.id as string | undefined;
           void qc.invalidateQueries({ queryKey: ["projects"] });
           if (id) void qc.invalidateQueries({ queryKey: ["project", id] });
+        } else if (type === "dispatcher.updated" || type === "project.paused") {
+          void qc.invalidateQueries({ queryKey: ["control"] });
+          void qc.invalidateQueries({ queryKey: ["projects"] });
         } else if (type === "run.log") {
           appendRunLog(qc, Number(data.id), data.entry as RunLogEntry);
         } else if (type === "run.changed" || type === "run.reported") {

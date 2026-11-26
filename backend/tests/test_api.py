@@ -117,3 +117,20 @@ def test_spa_fallback_without_build(authed: TestClient) -> None:
 
 def test_week_series_empty_before_any_reading(authed: TestClient) -> None:
     assert authed.get("/api/usage/week").json() == []
+
+
+def test_pause_and_resume_via_api(authed: TestClient) -> None:
+    csrf = {CSRF_HEADER: authed.cookies[CSRF_COOKIE]}
+    st = authed.get("/api/control").json()
+    assert st["paused"] is False and st["auto_start"] is False and st["checked_at"]
+    assert authed.post("/api/control/pause", json={"duration": "4h"}).status_code == 403  # CSRF
+    r = authed.post("/api/control/pause", json={"duration": "4h", "reason": "demo"}, headers=csrf)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["paused"] and body["paused_until"] and body["pause_reason"] == "demo"
+    assert body["reason"].startswith("paused until")
+    bad = authed.post("/api/control/pause", json={"duration": "forever"}, headers=csrf)
+    assert bad.status_code == 422
+    r = authed.post("/api/control/pause", json={}, headers=csrf)
+    assert r.json()["paused_indefinitely"] is True
+    assert authed.post("/api/control/resume", headers=csrf).json()["paused"] is False

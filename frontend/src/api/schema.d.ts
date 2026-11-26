@@ -333,6 +333,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/control": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Control */
+        get: operations["get_control_api_control_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/control/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pause */
+        post: operations["pause_api_control_pause_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/control/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume */
+        post: operations["resume_api_control_resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -487,6 +538,31 @@ export interface components {
              */
             max_five_hour_pct: number;
         };
+        /** ControlOut */
+        ControlOut: {
+            /** Paused */
+            paused: boolean;
+            /** Paused Until */
+            paused_until: string | null;
+            /** Paused Indefinitely */
+            paused_indefinitely: boolean;
+            /** Pause Reason */
+            pause_reason: string;
+            /** User Active */
+            user_active: boolean;
+            /** Activity Reason */
+            activity_reason: string | null;
+            /** Last Seen */
+            last_seen: string | null;
+            /** Auto Start */
+            auto_start: boolean;
+            /** Reason */
+            reason: string;
+            /** Checked At */
+            checked_at: string | null;
+            /** Breaker Paused */
+            breaker_paused: string[];
+        };
         /** CreateProjectIn */
         CreateProjectIn: {
             /** Name */
@@ -609,6 +685,19 @@ export interface components {
             bucket: string;
             /** Used Pct */
             used_pct: number;
+        };
+        /** PauseIn */
+        PauseIn: {
+            /**
+             * Duration
+             * @description e.g. 30m, 4h or 2d; omit to pause until you resume
+             */
+            duration?: string | null;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
         };
         /** PreflightOut */
         PreflightOut: {
@@ -2250,6 +2339,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["surplus__api__runs__ErrorOut"];
+                };
+            };
+        };
+    };
+    get_control_api_control_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlOut"];
+                };
+            };
+        };
+    };
+    pause_api_control_pause_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PauseIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_api_control_resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlOut"];
                 };
             };
         };

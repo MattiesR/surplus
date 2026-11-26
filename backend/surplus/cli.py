@@ -6,13 +6,17 @@ import asyncio
 import json
 import shutil
 import sys
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 
 from surplus.config import Paths, Settings
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 app = typer.Typer(help="Surplus: put unused AI subscription capacity to work.", no_args_is_help=True)
 statusline_app = typer.Typer(help="Opt-in status-line spooler (passive percent source).")
@@ -149,6 +153,47 @@ def doctor(
         typer.secho(f"[{c.level.value:>4}] {c.name:<24} {c.detail}", fg=colors[c.level])
     if any(c.level is Level.FAIL for c in checks):
         raise typer.Exit(1)
+
+
+def _with_session[T](fn: Callable[[Session], T]) -> T:
+    """Run `fn` in one transaction on the local database (works while the server is down)."""
+    from surplus.db.session import make_engine, make_sessionmaker, migrate
+
+    paths = Paths.from_env()
+    paths.ensure()
+    migrate(paths.db_url)
+    engine = make_engine(paths.db_url)
+    try:
+        with make_sessionmaker(engine).begin() as session:
+            return fn(session)
+    finally:
+        engine.dispose()
+
+
+@app.command()
+def pause(
+    duration: Annotated[str, typer.Argument(help="How long: 30m, 4h, 2d, or 'until-resume'")],
+    reason: Annotated[str, typer.Option(help="Shown in the dashboard")] = "",
+) -> None:
+    """Pause agent runs. Running agents wrap up within a minute (the server checks every tick)."""
+    from surplus.clock import SystemClock
+    from surplus.optimizer import control
+
+    try:
+        span = None if duration == "until-resume" else control.parse_duration(duration)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    state = _with_session(lambda s: control.set_pause(s, SystemClock().now(), span, reason))
+    typer.echo(f"Surplus is {state.describe()}. `surplus resume` ends it early.")
+
+
+@app.command()
+def resume() -> None:
+    """End a pause."""
+    from surplus.optimizer import control
+
+    had = _with_session(control.clear_pause)
+    typer.echo("Resumed." if had else "Surplus was not paused.")
 
 
 @app.command()

@@ -176,6 +176,8 @@ const WHY: Record<string, string> = {
   budget_exhausted: "it reached its 5-hour hard stop",
   max_turns: "it used all its turns",
   timeout: "it reached its time limit",
+  user_active: "you started working, and you have priority (kill switch)",
+  paused: "you paused Surplus",
 };
 
 /** The run stopped at a limit: ask the user whether it may go on, and how far (ADR 0008). */

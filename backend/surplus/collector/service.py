@@ -92,6 +92,7 @@ class Collector:
         # A fit without coefficients stores nothing; remember the attempt so it is not retried every tick.
         self.last_cost_fit_at: datetime | None = None
         self._baselines: dict[str, SeasonalBaseline] = {}
+        self.after_ingest: list[Callable[[], Awaitable[object]]] = []
 
     # ------------------------------------------------------------------ ingestion
 
@@ -157,6 +158,11 @@ class Collector:
         while True:
             try:
                 await asyncio.to_thread(self.ingest_once)
+                for hook in self.after_ingest:  # the dispatcher: the kill switch acts on fresh logs
+                    try:
+                        await hook()
+                    except Exception:
+                        log.exception("collector.after_ingest_failed")
                 with self.sm() as session:
                     latest = latest_readings(session)
                 due = reset_watcher.next_probe_at(

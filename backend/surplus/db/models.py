@@ -190,6 +190,8 @@ class RunRow(Base):
     timeout_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # A continuation resumes the parent's session on the parent's branch after the user allowed it.
     parent_run_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    # Who started it: "manual" (the user pressed Run) or "auto" (the dispatcher, Phase 5). ADR 0014.
+    trigger: Mapped[str] = mapped_column(String, default="manual")
     created_at: Mapped[datetime] = mapped_column(UTCDateTime)
     started_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
