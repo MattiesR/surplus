@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased — Phase 4: seasonal baseline predictor · 2026-11-26
+
+**Added**
+- Seasonal quantile baseline (plan §6.1, ADR 0010): pure `surplus/predictor/baseline.py` fits P50/P90 of
+  manual % per 15-min hour-of-week slot (local time zone) from per-slot observations, with a 3-week half-life
+  decay, neighbour pooling (±1 slot at weight 0.25, wrapping around the week) and weighted empirical quantiles.
+  Cold start (< 2 weeks of observed slots, or a slot with < 2 observations): P90 = the max of comparable
+  time-of-day slots on any day, never below an optional working-hours template; with no comparable data the
+  whole-window no-data prior applies, which leaves agents nothing. `SeasonalBaseline.forecast(start, end)`
+  returns per-slot forecasts with their basis (`history`, `cold_start`, `template`, `no_data`).
+- Unit tests for decay, smoothing, quantiles, time zones, cold start, template, gaps, and a hypothesis
+  property (0 ≤ P50 ≤ P90 ≤ the highest observed value or prior).
+
 ## Unreleased — Phase 4: cost model · 2026-11-25
 
 **Added**
