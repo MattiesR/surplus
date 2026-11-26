@@ -77,10 +77,29 @@ def weekly_reserve(confidence: float, to_reset: timedelta, cfg: BudgetConfig) ->
     return cfg.base_weekly_reserve * (2 - c) * sweep_factor(to_reset, cfg)
 
 
+TREND_SMOOTHING = 2.0  # ppw added to both sides of the ratio, so the first hours of a week are not jumpy
+
+
+def usage_trend(observed_so_far: float, predicted_so_far: float, smoothing: float = TREND_SMOOTHING) -> float:
+    """How much busier the user is this week than even the P90 forecast said (>= 1; 1 = as forecast).
+
+    Applied to the rest of the week's forecast, so a sudden change of habits (a deadline, a new job) stops
+    agent work within hours instead of letting it eat the week the user now needs (ADR 0012).
+    """
+    _finite(observed_so_far, predicted_so_far)
+    return max(1.0, (max(0.0, observed_so_far) + smoothing) / (max(0.0, predicted_so_far) + smoothing))
+
+
 def weekly_budget(
-    weekly_used: float, manual_future: float, confidence: float, to_reset: timedelta, cfg: BudgetConfig
+    weekly_used: float,
+    manual_future: float,
+    confidence: float,
+    to_reset: timedelta,
+    cfg: BudgetConfig,
+    trend: float = 1.0,
 ) -> WeeklyBudget:
-    _finite(weekly_used, manual_future, confidence)
+    _finite(weekly_used, manual_future, confidence, trend)
+    manual_future = max(0.0, manual_future) * max(1.0, trend)
     free = max(0.0, 100.0 - weekly_used)
     reserve = weekly_reserve(confidence, to_reset, cfg)
     by_reserve = free - max(0.0, manual_future) - reserve
@@ -92,6 +111,8 @@ def weekly_budget(
     ]
     if by_cap < by_reserve:
         reasons.append(f"weekly hard stop {cfg.max_weekly_pct:.0f}% leaves {max(0.0, by_cap):.1f}")
+    if trend > 1:
+        reasons.append(f"you are {trend:.1f}x busier than forecast this week: forecast scaled up")
     if sweep_factor(to_reset, cfg) < 1:
         reasons.append(f"end-of-week sweep: reserve x{sweep_factor(to_reset, cfg):.2f}")
     return WeeklyBudget(free, manual_future, reserve, surplus, tuple(reasons))

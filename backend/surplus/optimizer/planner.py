@@ -17,6 +17,8 @@ the week never exceeds 100 - weekly reserve or the weekly hard stop.
 
 from __future__ import annotations
 
+import bisect
+import itertools
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -49,6 +51,7 @@ class PlanInputs:
     user_active: bool
     weekly_per_five: float  # ppw per pp5
     config: BudgetConfig = DEFAULT_BUDGET
+    weekly_trend: float = 1.0  # budget.usage_trend of this week so far
 
 
 @dataclass(frozen=True)
@@ -80,9 +83,18 @@ class Plan:
         return sum(w.allocation for w in self.windows) * self.weekly_per_five
 
 
-def _sum(forecast: Sequence[SlotForecast], start: datetime, end: datetime) -> float:
-    lo = slot_floor(start)
-    return sum(f.p90_pct for f in forecast if lo <= ensure_utc(f.slot_start) < end)
+class _Cumulative:
+    """Prefix sums of P90 per slot, so a window's total is two bisections instead of a scan."""
+
+    def __init__(self, forecast: Sequence[SlotForecast]) -> None:
+        ordered = sorted(forecast, key=lambda f: f.slot_start)
+        self.starts = [ensure_utc(f.slot_start) for f in ordered]
+        self.prefix = [0.0, *itertools.accumulate(f.p90_pct for f in ordered)]
+
+    def total(self, start: datetime, end: datetime) -> float:
+        lo = bisect.bisect_left(self.starts, slot_floor(start))
+        hi = bisect.bisect_left(self.starts, end)
+        return self.prefix[hi] - self.prefix[lo] if hi > lo else 0.0
 
 
 def window_bounds(
@@ -122,14 +134,16 @@ def plan(inputs: PlanInputs) -> Plan:
     now = ensure_utc(inputs.now)
     weekly_reset = project_reset(ensure_utc(inputs.weekly_reset), "seven_day", now)
     bounds = window_bounds(now, inputs.five_reset, weekly_reset)
+    five_cum, weekly_cum = _Cumulative(inputs.five_forecast), _Cumulative(inputs.weekly_forecast)
     weekly = weekly_budget(
         inputs.weekly_used,
-        _sum(inputs.weekly_forecast, now, weekly_reset),
+        weekly_cum.total(now, weekly_reset),
         inputs.confidence,
         weekly_reset - now,
         cfg,
+        inputs.weekly_trend,
     )
-    manual = [_sum(inputs.five_forecast, s, e) for s, e in bounds]
+    manual = [five_cum.total(s, e) for s, e in bounds]
     capacity = [
         window_capacity(inputs.five_used if i == 0 else 0.0, m, inputs.user_active and i == 0, cfg)
         for i, m in enumerate(manual)

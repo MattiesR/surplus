@@ -152,6 +152,38 @@ def doctor(
 
 
 @app.command()
+def simulate(
+    profile: Annotated[str, typer.Option(help="light, heavy-weekday, irregular or all")] = "all",
+    weeks: Annotated[int, typer.Option(min=1, max=52)] = 4,
+    seed: Annotated[int, typer.Option()] = 1,
+) -> None:
+    """Replay a synthetic user through predictor, planner and guard rails with a fake runner (plan §13).
+
+    Exits with 1 if any user-blocked incident happened.
+    """
+    from surplus.simulator.engine import SimConfig
+    from surplus.simulator.engine import simulate as run_sim
+    from surplus.simulator.profiles import PROFILES
+
+    names = list(PROFILES) if profile == "all" else [profile]
+    unknown = [n for n in names if n not in PROFILES]
+    if unknown:
+        raise typer.BadParameter(f"unknown profile {unknown[0]}; choose from {', '.join(PROFILES)} or all")
+    incidents = 0
+    for name in names:
+        res = run_sim(PROFILES[name], SimConfig(weeks=weeks, seed=seed))
+        incidents += len(res.incidents)
+        typer.echo(res.summary())
+        for w in res.weeks:
+            typer.echo(
+                f"  week of {w.start:%Y-%m-%d}: you {w.user_pct:5.1f}% + agents {w.agent_pct:5.1f}%"
+                f" = {w.total_pct:5.1f}% of the weekly limit"
+            )
+    if incidents:
+        raise typer.Exit(1)
+
+
+@app.command()
 def openapi(out: Path = Path("openapi.json")) -> None:
     """Write the OpenAPI schema (the frontend's typed client is generated from it)."""
     import tempfile

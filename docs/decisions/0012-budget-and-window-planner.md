@@ -24,6 +24,12 @@ end-of-week sweep, but leaves the exact rules open. Implementation: `optimizer/b
 5. The plan is recomputed from the newest reported resets every tick; that is the re-sync. A reported 5-hour
    reset more than 5 min off the previous grid is reported by `anchor_drift` for the decision log and UI.
 
+6. **Trend correction** (found by the simulator, ADR 0013): the user's usage so far this week is compared with
+   the P90 forecast *as it was at the weekly reset* (a refitted model already contains this week, so it would
+   always look "as forecast"). If the user is busier, the rest of the week's forecast is scaled by
+   `(observed + 2) / (forecast + 2)`, never below 1. Without it, a light user turning heavy lost their week to
+   agents (37 blocked slots in the simulator); with it, 0.
+
 ## Consequences
 - Agent work concentrates in the windows before the weekly reset; early in the week only a small share runs.
   Unspent shares roll into later windows on the next tick, never past the weekly reset.
